@@ -2,7 +2,6 @@ package org.ozonLabel.user.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ozonLabel.notification.service.NotificationService;
 import org.ozonLabel.user.dto.*;
 import org.ozonLabel.domain.model.CompanyAuditLog;
 import org.ozonLabel.domain.model.CompanyMember;

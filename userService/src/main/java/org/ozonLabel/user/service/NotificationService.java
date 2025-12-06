@@ -1,4 +1,4 @@
-package org.ozonLabel.notification.service;
+package org.ozonLabel.user.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -6,7 +6,10 @@ import org.ozonLabel.domain.model.Notification;
 import org.ozonLabel.domain.model.User;
 import org.ozonLabel.domain.repository.NotificationRepository;
 import org.ozonLabel.domain.repository.UserRepository;
-import org.ozonLabel.notification.dto.*;
+import org.ozonLabel.user.dto.CreateNotificationDto;
+import org.ozonLabel.user.dto.NotificationListResponseDto;
+import org.ozonLabel.user.dto.NotificationResponseDto;
+import org.ozonLabel.user.dto.NotificationStatsDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

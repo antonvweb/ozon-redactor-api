@@ -1,4 +1,4 @@
-package org.ozonLabel.notification.dto;
+package org.ozonLabel.user.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

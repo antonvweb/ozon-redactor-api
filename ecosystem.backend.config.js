@@ -43,21 +43,6 @@ module.exports = {
         SPRING_PROFILES_ACTIVE: "prod",
         TZ: "Europe/Moscow"
       }
-    },
-
-    {
-      name: "notification-service",
-      script: "java",
-      args: ["-jar", "notification-1.0.0-exec.jar"],
-      cwd: "/root/ozonLabeApi/notification/target",
-      exec_mode: "fork",
-      instances: 1,
-      autorestart: true,
-      max_memory_restart: "512M",
-      env: {
-        SPRING_PROFILES_ACTIVE: "prod",
-        TZ: "Europe/Moscow"
-      }
     }
   ]
 };

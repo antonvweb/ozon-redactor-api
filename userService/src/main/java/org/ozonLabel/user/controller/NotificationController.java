@@ -1,10 +1,13 @@
-package org.ozonLabel.notification.controller;
+package org.ozonLabel.user.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ApiResponse;
-import org.ozonLabel.notification.dto.*;
-import org.ozonLabel.notification.service.NotificationService;
+import org.ozonLabel.user.service.NotificationService;
+import org.ozonLabel.user.dto.BulkNotificationActionDto;
+import org.ozonLabel.user.dto.NotificationListResponseDto;
+import org.ozonLabel.user.dto.NotificationResponseDto;
+import org.ozonLabel.user.dto.NotificationStatsDto;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
