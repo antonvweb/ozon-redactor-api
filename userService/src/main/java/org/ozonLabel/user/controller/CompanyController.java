@@ -59,7 +59,7 @@ public class CompanyController {
         log.info("Отмена приглашения {} владельцем {}", invitationId, ownerEmail);
 
         companyService.cancelInvitation(ownerEmail, invitationId);
-        return ResponseEntity.ok(ApiResponse.success("Приглашение отменено"));
+        return ResponseEntity.ok(ApiResponse.success("Приглашение отменео"));
     }
 
     /**

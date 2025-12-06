@@ -29,7 +29,7 @@ public class FolderController {
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Создание папки '{}' для пользователя {}", dto.getName(), userEmail);
+        log.info("Создание папки '{}' для пользовател {}", dto.getName(), userEmail);
 
         FolderResponseDto response = folderService.createFolder(userEmail, dto);
         return ResponseEntity.ok(response);
