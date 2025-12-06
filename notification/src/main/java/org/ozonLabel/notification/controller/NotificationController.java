@@ -33,7 +33,7 @@ public class NotificationController {
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Получение уведомлений для пользователя {}", userEmail);
+        log.info("Получение уведомлений для пользовател {}", userEmail);
 
         NotificationListResponseDto response = notificationService.getUserNotifications(
                 userEmail, page, size, unreadOnly, type);

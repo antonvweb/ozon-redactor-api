@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "auth-service",
       script: "java",
-      args: ["-jar", "authService-1.0.0.jar"],
+      args: ["-jar", "authService.jar"],
       cwd: "/root/ozonLabeApi/authService/target",
       exec_mode: "fork",
       instances: 1,
@@ -18,7 +18,7 @@ module.exports = {
     {
       name: "ozon-api",
       script: "java",
-      args: ["-jar", "ozonApi-1.0.0.jar"],
+      args: ["-jar", "ozonApi.jar"],
       cwd: "/root/ozonLabeApi/ozonApi/target",
       exec_mode: "fork",
       instances: 1,
@@ -33,7 +33,7 @@ module.exports = {
     {
       name: "user-service",
       script: "java",
-      args: ["-jar", "userService-1.0.0.jar"],
+      args: ["-jar", "userService.jar"],
       cwd: "/root/ozonLabeApi/userService/target",
       exec_mode: "fork",
       instances: 1,
@@ -48,7 +48,7 @@ module.exports = {
     {
       name: "notification-service",
       script: "java",
-      args: ["-jar", "notification-1.0.0.jar"],
+      args: ["-jar", "notification.jar"],
       cwd: "/root/ozonLabeApi/notification/target",
       exec_mode: "fork",
       instances: 1,
