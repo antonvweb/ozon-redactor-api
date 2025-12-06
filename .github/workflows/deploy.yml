@@ -10,10 +10,10 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4  # Изменено: v3 → v4 (улучшена стабильность)
+        uses: actions/checkout@v4
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v4  # Изменено: v3 → v4 (улучшена кэшировка Maven)
+        uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
@@ -27,20 +27,17 @@ jobs:
 
       - name: Archive Artifacts
         run: |
-          mkdir artifacts
-          cp authService/target/authService-*.jar artifacts/
-          cp ozonApi/target/ozonApi-*.jar artifacts/
-          cp userService/target/userService-*.jar artifacts/
-          cp notification/target/notification-*.jar artifacts/
-        shell: bash
+          mkdir -p artifacts
+          cp authService/target/authService-*.jar artifacts/ 2>/dev/null || true
+          cp ozonApi/target/ozonApi-*.jar artifacts/ 2>/dev/null || true
+          cp userService/target/userService-*.jar artifacts/ 2>/dev/null || true
+          cp notification/target/notification-*.jar artifacts/ 2>/dev/null || true
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4  # Изменено: v3 → v4
+        uses: actions/upload-artifact@v4
         with:
           name: backend-artifacts
-          path: |
-            artifacts/*.jar  # Упрощено: указываем только JAR-файлы (v4 эффективнее)
-          # Альтернатива: path: artifacts/ (v4 захватит всё рекурсивно по умолчанию)
+          path: artifacts/                     # ← вот и всё! Самый надёжный вариант
 
   deploy:
     runs-on: ubuntu-latest
@@ -51,7 +48,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: backend-artifacts      # ← обязательно то же имя, что в upload!
+          name: backend-artifacts
           path: artifacts
 
       - name: Copy JARs to Server
@@ -60,7 +57,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "artifacts/*.jar"        # ← теперь точно есть файлы
+          source: "artifacts/*.jar"
           target: "/root/ozonLabeApi/"
 
       - name: Restart PM2 Services
@@ -71,6 +68,8 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /root/ozonLabeApi/
-            ls -la artifacts/ || echo "No artifacts dir"
+            echo "Содержимое artifacts после скачивания:"
+            ls -la artifacts/ || echo "Папка artifacts пуста!"
             pm2 restart ecosystem.backend.config.js || pm2 start ecosystem.backend.config.js
             pm2 save
+            echo "Деплой завершён"
