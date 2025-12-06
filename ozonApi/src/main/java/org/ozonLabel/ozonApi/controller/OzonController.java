@@ -41,7 +41,7 @@ public class OzonController {
             @RequestParam(required = false) Long folderId,
             @RequestBody(required = false) SyncProductsRequest request) {
 
-        log.info("Начало синхронизации товаров для пользователя {} в папку: {}", userId, folderId);
+        log.info("Начало синхронизации товаров для пользователя: {} в папку: {}", userId, folderId);
 
         if (request == null) {
             request = SyncProductsRequest.builder()
