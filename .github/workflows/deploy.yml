@@ -75,6 +75,10 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo ✅ SSH connected"
 
+      - name: Sync root pom.xml to server
+        run: |
+          rsync -avz pom.xml ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/
+
       - name: Sync common & domain to server
         run: |
           rsync -avz --delete --exclude .idea --exclude target ./common/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/common/
