@@ -35,6 +35,7 @@ jobs:
           modules=$(echo "$modules" | jq -c 'if index("common") == null then . + ["common"] else . end | if index("domain") == null then . + ["domain"] else . end')
           echo "modules=$modules" >> $GITHUB_OUTPUT
 
+  # Синхронизация всего проекта + настройка SSH
   deploy-project-root:
     runs-on: ubuntu-latest
     needs: detect-changes
@@ -42,11 +43,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH
+      - name: Setup SSH (shimataro — работает 100%)
         uses: shimataro/ssh-key-action@v2
         with:
-          private-key: ${{ secrets.SERVER_SSH_KEY }}
-          known-hosts: unnecessary
+          key: ${{ secrets.SERVER_SSH_KEY }}                    # ПРАВИЛЬНОЕ имя параметра
+          known_hosts: unnecessary
           config: |
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
@@ -54,12 +55,13 @@ jobs:
 
       - name: Sync entire project to server
         run: |
-          echo "Синхронизируем весь проект..."
+          echo "Синхронизируем весь проект в ${{ secrets.DEPLOY_PROD_PATH }}..."
           rsync -avz --delete \
             --exclude='.git' --exclude='target' --exclude='.idea' --exclude='*.log' --exclude='node_modules' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/
-          echo "Синхронизация завершена. Проверяем наличие pom.xml на сервере..."
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "ls ${{ secrets.DEPLOY_PROD_PATH }}/pom.xml || echo 'pom.xml не найден!'"
+
+          echo "Проверка: корневой pom.xml на сервере"
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "ls -la ${{ secrets.DEPLOY_PROD_PATH }}/pom.xml"
 
   deploy-common:
     needs: [detect-changes, deploy-project-root]
@@ -72,23 +74,19 @@ jobs:
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
-          private-key: ${{ secrets.SERVER_SSH_KEY }}
-          known-hosts: unnecessary
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: unnecessary
           config: |
             StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            LogLevel ERROR
 
       - name: Install common & domain
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            if [ ! -f pom.xml ]; then
-              echo "Ошибка: корневой pom.xml не найден!"
-              exit 1
-            fi
+            echo "Установка common и domain..."
             mvn -U clean install -pl common,domain -am -DskipTests
+            echo "common и domain успешно установлены"
           EOF
 
   deploy-authService:
@@ -102,38 +100,21 @@ jobs:
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
-          private-key: ${{ secrets.SERVER_SSH_KEY }}
-          known-hosts: unnecessary
-          config: |
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            LogLevel ERROR
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: unnecessary
+          config: StrictHostKeyChecking no
 
-      - name: Sync & Build & Restart authService
+      - name: Deploy authService
         run: |
-          echo "Синхронизация authService..."
           rsync -avz --delete --exclude .idea --exclude target ./authService/ \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/authService/
 
-          echo "Сборка authService..."
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/authService
-            if [ ! -f pom.xml ]; then
-              echo "Ошибка: pom.xml в authService не найден!"
-              exit 1
-            fi
             mvn clean package -DskipTests
-          EOF
 
-          echo "Перезапуск auth-service..."
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            if [ ! -f ecosystem.backend.config.js ]; then
-              echo "Ошибка: ecosystem.backend.config.js не найден!"
-              exit 1
-            fi
             sudo pm2 delete auth-service || true
             sudo pm2 start ecosystem.backend.config.js --only auth-service --update-env
             sudo pm2 save
@@ -146,42 +127,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
-          private-key: ${{ secrets.SERVER_SSH_KEY }}
-          known-hosts: unnecessary
-          config: |
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            LogLevel ERROR
-
-      - name: Sync & Build & Restart ozonApi
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: unnecessary
+          config: StrictHostKeyChecking no
+      - name: Deploy ozonApi
         run: |
-          echo "Синхронизация ozonApi..."
           rsync -avz --delete --exclude .idea --exclude target ./ozonApi/ \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/ozonApi/
-
-          echo "Сборка ozonApi..."
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/ozonApi
-            if [ ! -f pom.xml ]; then
-              echo "Ошибка: pom.xml в ozonApi не найден!"
-              exit 1
-            fi
             mvn clean package -DskipTests
-          EOF
-
-          echo "Перезапуск ozon-api..."
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            if [ ! -f ecosystem.backend.config.js ]; then
-              echo "Ошибка: ecosystem.backend.config.js не найден!"
-              exit 1
-            fi
             sudo pm2 delete ozon-api || true
             sudo pm2 start ecosystem.backend.config.js --only ozon-api --update-env
             sudo pm2 save
@@ -194,42 +154,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
-          private-key: ${{ secrets.SERVER_SSH_KEY }}
-          known-hosts: unnecessary
-          config: |
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            LogLevel ERROR
-
-      - name: Sync & Build & Restart userService
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: unnecessary
+          config: StrictHostKeyChecking no
+      - name: Deploy userService
         run: |
-          echo "Синхронизация userService..."
           rsync -avz --delete --exclude .idea --exclude target ./userService/ \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/userService/
-
-          echo "Сборка userService..."
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/userService
-            if [ ! -f pom.xml ]; then
-              echo "Ошибка: pom.xml в userService не найден!"
-              exit 1
-            fi
             mvn clean package -DskipTests
-          EOF
-
-          echo "Перезапуск user-service..."
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            if [ ! -f ecosystem.backend.config.js ]; then
-              echo "Ошибка: ecosystem.backend.config.js не найден!"
-              exit 1
-            fi
             sudo pm2 delete user-service || true
             sudo pm2 start ecosystem.backend.config.js --only user-service --update-env
             sudo pm2 save
@@ -242,42 +181,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
-          private-key: ${{ secrets.SERVER_SSH_KEY }}
-          known-hosts: unnecessary
-          config: |
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            LogLevel ERROR
-
-      - name: Sync & Build & Restart notification
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: unnecessary
+          config: StrictHostKeyChecking no
+      - name: Deploy notification
         run: |
-          echo "Синхронизация notification..."
           rsync -avz --delete --exclude .idea --exclude target ./notification/ \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/notification/
-
-          echo "Сборка notification..."
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/notification
-            if [ ! -f pom.xml ]; then
-              echo "Ошибка: pom.xml в notification не найден!"
-              exit 1
-            fi
             mvn clean package -DskipTests
-          EOF
-
-          echo "Перезапуск notification-service..."
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            if [ ! -f ecosystem.backend.config.js ]; then
-              echo "Ошибка: ecosystem.backend.config.js не найден!"
-              exit 1
-            fi
             sudo pm2 delete notification-service || true
             sudo pm2 start ecosystem.backend.config.js --only notification-service --update-env
             sudo pm2 save
