@@ -53,8 +53,31 @@ jobs:
           echo "all_changed_files_json=${{ steps.detect.outputs.all_changed_files_json }}"
           echo "all_changed_files=${{ steps.detect.outputs.all_changed_files }}"
 
-  deploy-common:
+  deploy-project-root:
+    runs-on: ubuntu-latest
     needs: detect-changes
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync entire project structure (включая корневой pom.xml)
+        run: |
+          echo "Синхронизируем весь проект на сервер..."
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='target' \
+            --exclude='.idea' \
+            --exclude='*.log' \
+            --exclude='node_modules' \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/
+
+  deploy-common:
+    needs: [detect-changes, deploy-project-root]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'common') || contains(fromJson(needs.detect-changes.outputs.modules), 'domain')
     runs-on: ubuntu-latest
     steps:
@@ -88,14 +111,15 @@ jobs:
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
-            cd ${{ secrets.DEPLOY_PROD_PATH }}/common
-            mvn clean install
-            cd ${{ secrets.DEPLOY_PROD_PATH }}/domain
-            mvn clean install
+            cd ${{ secrets.DEPLOY_PROD_PATH }}
+
+            # Принудительно пересобираем common и domain
+            mvn -U clean install -pl common -am -DskipTests
+            mvn -U clean install -pl domain -am -DskipTests
           EOF
 
   deploy-authService:
-    needs: [detect-changes, deploy-common]
+    needs: [detect-changes, deploy-common, deploy-project-root]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'authService')
     runs-on: ubuntu-latest
     steps:
@@ -140,7 +164,7 @@ jobs:
           EOF
 
   deploy-ozonApi:
-    needs: [detect-changes, deploy-common]
+    needs: [detect-changes, deploy-common, deploy-project-root]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'ozonApi')
     runs-on: ubuntu-latest
     steps:
@@ -185,7 +209,7 @@ jobs:
           EOF
 
   deploy-userService:
-    needs: [detect-changes, deploy-common]
+    needs: [detect-changes, deploy-common, deploy-project-root]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'userService')
     runs-on: ubuntu-latest
     steps:
@@ -230,7 +254,7 @@ jobs:
           EOF
 
   deploy-notification:
-    needs: [detect-changes, deploy-common]
+    needs: [detect-changes, deploy-common, deploy-project-root]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'notification')
     runs-on: ubuntu-latest
     steps:
