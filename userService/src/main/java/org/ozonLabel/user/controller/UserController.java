@@ -55,6 +55,6 @@ public class UserController {
         String requesterEmail = auth.getName();
         userService.requestPremiumAccess(requesterEmail, dto);
 
-        return ResponseEntity.ok(ApiResponse.success("Заявка отправлена! Мы свяжемся с вами в ближайшее времяz"));
+        return ResponseEntity.ok(ApiResponse.success("Заявка отправлена! Мы свяжемся с вами в ближайшее время"));
     }
 }
