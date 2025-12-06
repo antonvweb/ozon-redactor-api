@@ -84,43 +84,9 @@ jobs:
             echo "common и domain установлены в локальный репозиторий"
           EOF
 
-  # 3. notification — ДЕЛАЕМ install! (потому что от него зависит userService)
-  deploy-notification:
-    needs: [detect-changes, deploy-project-root, deploy-common]
-    if: contains(fromJson(needs.detect-changes.outputs.modules), 'notification')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup SSH
-        uses: shimataro/ssh-key-action@v2
-        with:
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          known_hosts: unnecessary
-          config: StrictHostKeyChecking no
-      - name: Deploy notification (install!)
-        run: |
-          rsync -avz --delete --exclude .idea --exclude target ./notification/ \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/notification/
-
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -e
-            cd ${{ secrets.DEPLOY_PROD_PATH }}/notification
-            echo "Сборка и установка notification в ~/.m2..."
-            mvn clean install -DskipTests
-          EOF
-
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -ex
-            cd ${{ secrets.DEPLOY_PROD_PATH }}
-            sudo pm2 delete notification-service || true
-            sudo pm2 start ecosystem.backend.config.js --only notification-service --update-env
-            sudo pm2 save
-          EOF
-
-  # 4. userService — теперь видит notification
+  # 3. userService — теперь видит notification
   deploy-userService:
-    needs: [detect-changes, deploy-project-root, deploy-common, deploy-notification]
+    needs: [detect-changes, deploy-project-root, deploy-common]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'userService')
     runs-on: ubuntu-latest
     steps:

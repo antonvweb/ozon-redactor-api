@@ -65,9 +65,9 @@ public class NotificationService {
      * Создать уведомление о приглашении
      */
     @Transactional
-    public Notification createInvitationNotification(Long recipientId, Long invitationId,
-                                                     Long senderId, String senderName,
-                                                     String companyName, String role) {
+    public void createInvitationNotification(Long recipientId, Long invitationId,
+                                             Long senderId, String senderName,
+                                             String companyName, String role) {
         Map<String, Object> data = new HashMap<>();
         data.put("invitationId", invitationId);
         data.put("senderName", senderName);
@@ -89,15 +89,15 @@ public class NotificationService {
                 .expiresAt(LocalDateTime.now().plusDays(7))
                 .build();
 
-        return createNotification(dto);
+        createNotification(dto);
     }
 
     /**
      * Создать уведомление о принятии приглашения
      */
     @Transactional
-    public Notification createInvitationAcceptedNotification(Long ownerId, String memberName,
-                                                             Long memberId, String companyName) {
+    public void createInvitationAcceptedNotification(Long ownerId, String memberName,
+                                                     Long memberId, String companyName) {
         Map<String, Object> data = new HashMap<>();
         data.put("memberName", memberName);
         data.put("memberId", memberId);
@@ -116,15 +116,15 @@ public class NotificationService {
                 .senderId(memberId)
                 .build();
 
-        return createNotification(dto);
+        createNotification(dto);
     }
 
     /**
      * Создать уведомление об отклонении приглашения
      */
     @Transactional
-    public Notification createInvitationRejectedNotification(Long ownerId, String memberName,
-                                                             String companyName) {
+    public void createInvitationRejectedNotification(Long ownerId, String memberName,
+                                                     String companyName) {
         Map<String, Object> data = new HashMap<>();
         data.put("memberName", memberName);
         data.put("companyName", companyName);
@@ -139,7 +139,7 @@ public class NotificationService {
                 .priority(Notification.NotificationPriority.NORMAL)
                 .build();
 
-        return createNotification(dto);
+        createNotification(dto);
     }
 
     /**
