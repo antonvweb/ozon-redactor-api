@@ -10,6 +10,7 @@
     </parent>
 
     <artifactId>notification</artifactId>
+    <packaging>jar</packaging>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -74,22 +75,7 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <mainClass>org.ozonLabel.notification.NotificationServiceApplication</mainClass>
-                    <finalName>notification</finalName>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>repackage</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
+            <!-- ОСТАВЛЯЕМ только compiler, если нужен lombok -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -105,6 +91,16 @@
                     <compilerArgs>
                         <arg>-parameters</arg>
                     </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!-- ВАЖНО: либо полностью убираем spring-boot плагин, либо оставляем с classifier -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- Это заставит плагин создать ОТДЕЛЬНЫЙ исполняемый JAR, а обычный оставит нетронутым -->
+                    <classifier>exec</classifier>
                 </configuration>
             </plugin>
         </plugins>
