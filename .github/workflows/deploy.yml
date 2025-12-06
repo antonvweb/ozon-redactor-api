@@ -148,7 +148,7 @@ jobs:
           EOF
 
   deploy-userService:
-    needs: [detect-changes, deploy-project-root, deploy-common,  deploy-ozonApi]
+    needs: [detect-changes, deploy-project-root, deploy-common,  deploy-ozonApi, deploy-notification]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'userService')
     runs-on: ubuntu-latest
     steps:

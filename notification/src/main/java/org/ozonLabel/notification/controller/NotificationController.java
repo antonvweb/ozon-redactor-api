@@ -110,7 +110,7 @@ public class NotificationController {
         int count = notificationService.markAllAsRead(userEmail);
 
         return ResponseEntity.ok(ApiResponse.success(
-                String.format("Отмечено %d уведомлений как прочитанн", count)));
+                String.format("Отмечено %d уведомлений как прочитанны", count)));
     }
 
     /**
