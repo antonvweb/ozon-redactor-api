@@ -10,6 +10,7 @@
     </parent>
 
     <artifactId>notification</artifactId>
+    <packaging>jar</packaging>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -71,19 +72,5 @@
             <artifactId>tomcat-embed-core</artifactId>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <!-- ЭТА СТРОКА РЕШАЕТ ВСЮ ПРОБЛЕМУ -->
-                    <classifier>exec</classifier>
-                    <!-- или можно <skip>true</skip> если вообще не нужен fat-jar на этапе разработки -->
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 
 </project>

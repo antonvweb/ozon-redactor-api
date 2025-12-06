@@ -21,8 +21,8 @@
         <module>domain</module>
         <module>authService</module>
         <module>ozonApi</module>
-        <module>userService</module>
         <module>notification</module>
+        <module>userService</module>
     </modules>
 
     <properties>
