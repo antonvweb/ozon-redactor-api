@@ -18,10 +18,10 @@
     <packaging>pom</packaging>
     <modules>
         <module>common</module>
+        <module>domain</module>
         <module>authService</module>
         <module>ozonApi</module>
         <module>userService</module>
-        <module>domain</module>
         <module>notification</module>
     </modules>
 
