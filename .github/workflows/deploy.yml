@@ -63,7 +63,7 @@ jobs:
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
 
       - name: Sync entire project structure (включая корневой pom.xml)
         run: |
@@ -74,7 +74,7 @@ jobs:
             --exclude='.idea' \
             --exclude='*.log' \
             --exclude='node_modules' \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/
 
   deploy-common:
     needs: [detect-changes, deploy-project-root]
