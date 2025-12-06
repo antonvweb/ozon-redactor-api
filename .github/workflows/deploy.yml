@@ -35,7 +35,7 @@ jobs:
           modules=$(echo "$modules" | jq -c 'if index("common") == null then . + ["common"] else . end | if index("domain") == null then . + ["domain"] else . end')
           echo "modules=$modules" >> $GITHUB_OUTPUT
 
-  # Синхронизация всего проекта + настройка SSH
+  # 1. Синхронизация всего проекта (включая корневой pom.xml)
   deploy-project-root:
     runs-on: ubuntu-latest
     needs: detect-changes
@@ -43,26 +43,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH (shimataro — работает 100%)
+      - name: Setup SSH (100% работает)
         uses: shimataro/ssh-key-action@v2
         with:
-          key: ${{ secrets.SERVER_SSH_KEY }}                    # ПРАВИЛЬНОЕ имя параметра
+          key: ${{ secrets.SERVER_SSH_KEY }}
           known_hosts: unnecessary
           config: |
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
             LogLevel ERROR
 
-      - name: Sync entire project to server
+      - name: Sync entire project
         run: |
-          echo "Синхронизируем весь проект в ${{ secrets.DEPLOY_PROD_PATH }}..."
+          echo "Синхронизация всего проекта в ${{ secrets.DEPLOY_PROD_PATH }}..."
           rsync -avz --delete \
             --exclude='.git' --exclude='target' --exclude='.idea' --exclude='*.log' --exclude='node_modules' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/
 
-          echo "Проверка: корневой pom.xml на сервере"
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "ls -la ${{ secrets.DEPLOY_PROD_PATH }}/pom.xml"
-
+  # 2. Установка common + domain (всегда, если они изменились)
   deploy-common:
     needs: [detect-changes, deploy-project-root]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'common') || contains(fromJson(needs.detect-changes.outputs.modules), 'domain')
@@ -70,15 +68,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SERVER_SSH_KEY }}
           known_hosts: unnecessary
-          config: |
-            StrictHostKeyChecking no
-
+          config: StrictHostKeyChecking no
       - name: Install common & domain
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
@@ -86,9 +81,78 @@ jobs:
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             echo "Установка common и domain..."
             mvn -U clean install -pl common,domain -am -DskipTests
-            echo "common и domain успешно установлены"
+            echo "common и domain установлены в локальный репозиторий"
           EOF
 
+  # 3. notification — ДЕЛАЕМ install! (потому что от него зависит userService)
+  deploy-notification:
+    needs: [detect-changes, deploy-project-root, deploy-common]
+    if: contains(fromJson(needs.detect-changes.outputs.modules), 'notification')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup SSH
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: unnecessary
+          config: StrictHostKeyChecking no
+      - name: Deploy notification (install!)
+        run: |
+          rsync -avz --delete --exclude .idea --exclude target ./notification/ \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/notification/
+
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -e
+            cd ${{ secrets.DEPLOY_PROD_PATH }}/notification
+            echo "Сборка и установка notification в ~/.m2..."
+            mvn clean install -DskipTests
+          EOF
+
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -ex
+            cd ${{ secrets.DEPLOY_PROD_PATH }}
+            sudo pm2 delete notification-service || true
+            sudo pm2 start ecosystem.backend.config.js --only notification-service --update-env
+            sudo pm2 save
+          EOF
+
+  # 4. userService — теперь видит notification
+  deploy-userService:
+    needs: [detect-changes, deploy-project-root, deploy-common, deploy-notification]
+    if: contains(fromJson(needs.detect-changes.outputs.modules), 'userService')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup SSH
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: unnecessary
+          config: StrictHostKeyChecking no
+      - name: Deploy userService
+        run: |
+          rsync -avz --delete --exclude .idea --exclude target ./userService/ \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/userService/
+
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -e
+            cd ${{ secrets.DEPLOY_PROD_PATH }}/userService
+            echo "Сборка userService (notification уже в ~/.m2)"
+            mvn clean package -DskipTests
+          EOF
+
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -ex
+            cd ${{ secrets.DEPLOY_PROD_PATH }}
+            sudo pm2 delete user-service || true
+            sudo pm2 start ecosystem.backend.config.js --only user-service --update-env
+            sudo pm2 save
+          EOF
+
+  # 5. Остальные сервисы (не зависят от notification)
   deploy-authService:
     needs: [detect-changes, deploy-project-root, deploy-common]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'authService')
@@ -96,24 +160,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SERVER_SSH_KEY }}
           known_hosts: unnecessary
           config: StrictHostKeyChecking no
-
       - name: Deploy authService
         run: |
           rsync -avz --delete --exclude .idea --exclude target ./authService/ \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/authService/
-
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/authService
             mvn clean package -DskipTests
-
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             sudo pm2 delete auth-service || true
             sudo pm2 start ecosystem.backend.config.js --only auth-service --update-env
@@ -140,63 +200,9 @@ jobs:
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/ozonApi
-            mvn clean install -DskipTests
+            mvn clean package -DskipTests
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             sudo pm2 delete ozon-api || true
             sudo pm2 start ecosystem.backend.config.js --only ozon-api --update-env
-            sudo pm2 save
-          EOF
-
-  deploy-userService:
-    needs: [detect-changes, deploy-project-root, deploy-common,  deploy-ozonApi, deploy-notification]
-    if: contains(fromJson(needs.detect-changes.outputs.modules), 'userService')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup SSH
-        uses: shimataro/ssh-key-action@v2
-        with:
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          known_hosts: unnecessary
-          config: StrictHostKeyChecking no
-      - name: Deploy userService
-        run: |
-          rsync -avz --delete --exclude .idea --exclude target ./userService/ \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/userService/
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -e
-            cd ${{ secrets.DEPLOY_PROD_PATH }}/userService
-            mvn clean package -DskipTests
-            cd ${{ secrets.DEPLOY_PROD_PATH }}
-            sudo pm2 delete user-service || true
-            sudo pm2 start ecosystem.backend.config.js --only user-service --update-env
-            sudo pm2 save
-          EOF
-
-  deploy-notification:
-    needs: [detect-changes, deploy-project-root, deploy-common]
-    if: contains(fromJson(needs.detect-changes.outputs.modules), 'notification')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup SSH
-        uses: shimataro/ssh-key-action@v2
-        with:
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          known_hosts: unnecessary
-          config: StrictHostKeyChecking no
-      - name: Deploy notification
-        run: |
-          rsync -avz --delete --exclude .idea --exclude target ./notification/ \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/notification/
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -e
-            cd ${{ secrets.DEPLOY_PROD_PATH }}/notification
-            mvn clean package -DskipTests
-            cd ${{ secrets.DEPLOY_PROD_PATH }}
-            sudo pm2 delete notification-service || true
-            sudo pm2 start ecosystem.backend.config.js --only notification-service --update-env
             sudo pm2 save
           EOF
