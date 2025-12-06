@@ -111,7 +111,7 @@ public class AuthController {
                                                     HttpServletRequest request, HttpServletResponse response) {
         if (refreshToken == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("Refresh token отсутствует"));
+                    .body(ApiResponse.error("Refresh token отсутствуе"));
         }
 
         try {
