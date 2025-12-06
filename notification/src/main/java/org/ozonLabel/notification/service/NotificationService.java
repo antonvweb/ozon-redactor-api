@@ -74,7 +74,7 @@ public class NotificationService {
         CreateNotificationDto dto = CreateNotificationDto.builder()
                 .userId(recipientId)
                 .type(Notification.NotificationType.INVITATION)
-                .title("Приглашение в компанию")
+                .title("Приглашение в компани")
                 .message(String.format("%s приглашает вас в компанию \"%s\" с ролью %s",
                         senderName, companyName, role))
                 .data(data)

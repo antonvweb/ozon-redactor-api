@@ -39,7 +39,7 @@ public class CompanyController {
             @Valid @RequestBody InviteUserRequestDto request) {
 
         String ownerEmail = auth.getName();
-        log.info("Отправка приглашения от {} для {}",
+        log.info("Отправка приглашения от {} дл {}",
                 ownerEmail,
                 request.getEmail() != null ? request.getEmail() : request.getPhone());
 
