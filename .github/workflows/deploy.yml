@@ -69,20 +69,20 @@ jobs:
       - name: 🧱 Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🔌 Test SSH connection
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "echo ✅ SSH connected"
 
       - name: Sync common & domain to server
         run: |
-          rsync -avz --delete --exclude .idea --exclude target ./common/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/common/
-          rsync -avz --delete --exclude .idea --exclude target ./domain/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/domain/
+          rsync -avz --delete --exclude .idea --exclude target ./common/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/common/
+          rsync -avz --delete --exclude .idea --exclude target ./domain/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/domain/
 
       - name: Install common & domain on server
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/common
             mvn clean install
@@ -106,19 +106,19 @@ jobs:
       - name: 🧱 Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🔌 Test SSH connection
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "echo ✅ SSH connected"
 
       - name: Sync authService to server
         run: |
-          rsync -avz --delete --exclude .idea --exclude target ./authService/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/authService/
+          rsync -avz --delete --exclude .idea --exclude target ./authService/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/authService/
 
       - name: Build authService on server
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/authService
             mvn clean -U
@@ -127,7 +127,7 @@ jobs:
 
       - name: Restart authService
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             sudo pm2 delete auth-service || true
@@ -151,19 +151,19 @@ jobs:
       - name: 🧱 Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🔌 Test SSH connection
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "echo ✅ SSH connected"
 
       - name: Sync ozonApi to server
         run: |
-          rsync -avz --delete --exclude .idea --exclude target ./ozonApi/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/ozonApi/
+          rsync -avz --delete --exclude .idea --exclude target ./ozonApi/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/ozonApi/
 
       - name: Build ozonApi on server
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/ozonApi
             mvn clean -U
@@ -172,7 +172,7 @@ jobs:
 
       - name: Restart ozonApi
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             sudo pm2 delete ozon-api || true
@@ -196,19 +196,19 @@ jobs:
       - name: 🧱 Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🔌 Test SSH connection
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "echo ✅ SSH connected"
 
       - name: Sync userService to server
         run: |
-          rsync -avz --delete --exclude .idea --exclude target ./userService/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/userService/
+          rsync -avz --delete --exclude .idea --exclude target ./userService/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/userService/
 
       - name: Build userService on server
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/userService
             mvn clean -U
@@ -217,7 +217,7 @@ jobs:
 
       - name: Restart userService
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             sudo pm2 delete user-service || true
@@ -241,19 +241,19 @@ jobs:
       - name: 🧱 Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🔌 Test SSH connection
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "echo ✅ SSH connected"
 
       - name: Sync notification to server
         run: |
-          rsync -avz --delete --exclude .idea --exclude target ./notification/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/notification/
+          rsync -avz --delete --exclude .idea --exclude target ./notification/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/notification/
 
       - name: Build notification on server
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/notification
             mvn clean -U
@@ -262,7 +262,7 @@ jobs:
 
       - name: Restart notification
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             sudo pm2 delete notification-service || true
