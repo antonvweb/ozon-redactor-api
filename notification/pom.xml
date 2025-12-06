@@ -99,8 +99,8 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <!-- Это заставит плагин создать ОТДЕЛЬНЫЙ исполняемый JAR, а обычный оставит нетронутым -->
-                    <classifier>exec</classifier>
+                    <classifier>exec</classifier>   <!-- ← ЭТА СТРОЧКА РЕШАЕТ ВСЁ -->
+                    <mainClass>org.ozonLabel.notification.NotificationApplication</mainClass>
                 </configuration>
             </plugin>
         </plugins>
