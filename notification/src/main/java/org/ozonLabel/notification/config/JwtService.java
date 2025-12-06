@@ -1,4 +1,4 @@
-package org.ozonLabel.ozonApi.config;
+package org.ozonLabel.notification.config;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;

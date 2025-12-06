@@ -1,4 +1,4 @@
-package org.ozonLabel.ozonApi.config;
+package org.ozonLabel.notification.config;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;

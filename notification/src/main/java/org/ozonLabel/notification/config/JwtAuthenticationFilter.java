@@ -1,4 +1,4 @@
-package org.ozonLabel.ozonApi.config;
+package org.ozonLabel.notification.config;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
