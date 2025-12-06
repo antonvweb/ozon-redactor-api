@@ -48,7 +48,7 @@ module.exports = {
     {
       name: "notification-service",
       script: "java",
-      args: ["-jar", "notification.jar"],
+      args: ["-jar", "notification-1.0.0.jar"],
       cwd: "/root/ozonLabeApi/notification/target",
       exec_mode: "fork",
       instances: 1,
