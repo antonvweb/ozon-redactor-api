@@ -61,7 +61,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "artifacts/*.jar"        # ← теперь точно есть файлы
-          target: "/var/www/ozon-redactor/backend"
+          target: "/root/ozonLabeApi/"
 
       - name: Restart PM2 Services
         uses: appleboy/ssh-action@v0.1.6
@@ -70,7 +70,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /var/www/ozon-redactor/backend
+            cd /root/ozonLabeApi/
             ls -la artifacts/ || echo "No artifacts dir"
             pm2 restart ecosystem.backend.config.js || pm2 start ecosystem.backend.config.js
             pm2 save
