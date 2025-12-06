@@ -140,7 +140,7 @@ jobs:
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/ozonApi
-            mvn clean package -DskipTests
+            mvn clean install -DskipTests
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             sudo pm2 delete ozon-api || true
             sudo pm2 start ecosystem.backend.config.js --only ozon-api --update-env
@@ -148,7 +148,7 @@ jobs:
           EOF
 
   deploy-userService:
-    needs: [detect-changes, deploy-project-root, deploy-common]
+    needs: [detect-changes, deploy-project-root, deploy-common,  deploy-ozonApi]
     if: contains(fromJson(needs.detect-changes.outputs.modules), 'userService')
     runs-on: ubuntu-latest
     steps:
