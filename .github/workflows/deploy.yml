@@ -77,7 +77,7 @@ jobs:
 
       - name: Sync root pom.xml to server
         run: |
-          rsync -avz pom.xml ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/
+          rsync -avz pom.xml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/
 
       - name: Sync common & domain to server
         run: |
