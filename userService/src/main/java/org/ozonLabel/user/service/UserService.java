@@ -1,0 +1,118 @@
+package org.ozonLabel.user.service;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.ozonLabel.user.dto.PremiumRequestDto;
+import org.ozonLabel.user.dto.UpdateOzonCredentialsDto;
+import org.ozonLabel.user.dto.UpdateProfileDto;
+import org.ozonLabel.user.dto.UserResponseDto;
+import org.ozonLabel.domain.model.User;
+import org.ozonLabel.domain.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class UserService {
+    private final UserRepository userRepository;
+    private final JavaMailSender mailSender;
+
+    @Value("${app.support.email:a.volkov@print-365.ru}")
+    private String supportEmail;
+
+    public UserResponseDto getCurrentUser(String email) {
+        log.info("Запрашиваем данные пользователя по email: {}", email);
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Пользователь не найден"));
+
+        return mapToDto(user);
+    }
+
+    public UserResponseDto updateProfile(String currentEmail, UpdateProfileDto dto) {
+        if (dto.isEmpty()) {
+            throw new IllegalArgumentException("Хотя бы одно поле должно быть заполнено");
+        }
+
+        User user = getUserByEmail(currentEmail);
+
+        if (dto.getCompanyName() != null) user.setCompanyName(dto.getCompanyName());
+        if (dto.getInn() != null) user.setInn(dto.getInn());
+        if (dto.getPhone() != null) user.setPhone(dto.getPhone());
+        if (dto.getEmail() != null) {
+            if (userRepository.existsByEmail(dto.getEmail()) && !dto.getEmail().equals(currentEmail)) {
+                throw new IllegalArgumentException("Этот email уже занят");
+            }
+            user.setEmail(dto.getEmail());
+        }
+
+        return mapToDto(userRepository.save(user));
+    }
+
+    public UserResponseDto updateOzonCredentials(String email, UpdateOzonCredentialsDto dto) {
+        if (dto.isEmpty()) {
+            throw new IllegalArgumentException("Хотя бы одно поле должно быть заполнено");
+        }
+
+        User user = getUserByEmail(email);
+        if (dto.getOzonClientId() != null) user.setOzonClientId(dto.getOzonClientId().trim());
+        if (dto.getOzonApiKey() != null) user.setOzonApiKey(dto.getOzonApiKey().trim());
+
+        return mapToDto(userRepository.save(user));
+    }
+
+    public void requestPremiumAccess(String requesterEmail, PremiumRequestDto dto) {
+        User requester = userRepository.findByEmail(requesterEmail)
+                .orElse(null); // может быть null, если ещё не зареган
+
+        String subject = "Заявка на индивидуальную подписку — ozonLabel";
+        String text = """
+                Новая заявка на индивидуальную подписку!
+
+                Email для связи: %s
+                Пользователь: %s
+                ID в системе: %s
+                Текущая подписка: %s
+
+                Свяжитесь с ним как можно скорее!
+                """.formatted(
+                dto.getEmail(),
+                requester != null ? requester.getName() + " (" + requester.getEmail() + ")" : "Не зареган",
+                requester != null ? requester.getId() : "—",
+                requester != null ? requester.getSubscription() : "—"
+        );
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom("a.volkov@print-365.ru");
+        message.setTo(supportEmail);
+        message.setSubject(subject);
+        message.setText(text);
+
+        mailSender.send(message);
+        log.info("Заявка на премиум отправлена на {} от {}", supportEmail, dto.getEmail());
+    }
+
+    private User getUserByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+    }
+
+    private UserResponseDto mapToDto(User user) {
+        UserResponseDto dto = new UserResponseDto();
+        dto.setId(user.getId());
+        dto.setName(user.getName());
+        dto.setEmail(user.getEmail());
+        dto.setCompanyName(user.getCompanyName());
+        dto.setInn(user.getInn());
+        dto.setPhone(user.getPhone());
+        dto.setOzonClientId(user.getOzonClientId());
+        dto.setSubscription(user.getSubscription());
+        return dto;
+    }
+}

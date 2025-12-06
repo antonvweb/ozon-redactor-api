@@ -1,0 +1,161 @@
+{
+  "items": [
+    {
+      "id": 1296511504,
+      "name": "Веточка новогодняя для декора. ветка еловая искусственная 13 см",
+      "offer_id": "2334975",
+      "is_archived": false,
+      "is_autoarchived": false,
+      "barcodes": [
+        "2900023349750",
+        "6900023349756",
+        "OZN1788664414"
+      ],
+      "description_category_id": 17027938,
+      "type_id": 970623275,
+      "created_at": "2024-12-17T09:43:32.912636Z",
+      "images": [
+        "https://cdn1.ozone.ru/s3/multimedia-1-u/7149597330.jpg",
+        "https://cdn1.ozone.ru/s3/multimedia-1-k/7149597320.jpg"
+      ],
+      "currency_code": "RUB",
+      "min_price": "398.00",
+      "old_price": "600.00",
+      "price": "398.00",
+      "sources": [
+        {
+          "sku": 1788664414,
+          "source": "sds",
+          "created_at": "2024-12-17T09:44:57.155824Z",
+          "shipment_type": "SHIPMENT_TYPE_GENERAL",
+          "quant_code": ""
+        },
+        {
+          "sku": 1788676480,
+          "source": "sds",
+          "created_at": "2024-12-17T09:51:21.106931Z",
+          "shipment_type": "SHIPMENT_TYPE_BOX",
+          "quant_code": "2334975"
+        }
+      ],
+      "model_info": {
+        "model_id": 946829706,
+        "count": 4
+      },
+      "commissions": [
+        {
+          "delivery_amount": 25,
+          "percent": 41,
+          "return_amount": 46,
+          "sale_schema": "FBO",
+          "value": 163.18
+        },
+        {
+          "delivery_amount": 25,
+          "percent": 40,
+          "return_amount": 80,
+          "sale_schema": "FBS",
+          "value": 159.2
+        },
+        {
+          "percent": 42,
+          "sale_schema": "RFBS",
+          "value": 167.16
+        },
+        {
+          "percent": 42,
+          "sale_schema": "FBP",
+          "value": 167.16
+        }
+      ],
+      "is_prepayment_allowed": true,
+      "volume_weight": 0.1,
+      "has_discounted_fbo_item": false,
+      "is_discounted": false,
+      "discounted_fbo_stocks": 0,
+      "stocks": {
+        "has_stock": true,
+        "stocks": [
+          {
+            "present": 18,
+            "reserved": 0,
+            "sku": 1788676480,
+            "source": "fbo"
+          }
+        ]
+      },
+      "errors": [],
+      "updated_at": "2024-12-19T17:56:33.984305Z",
+      "vat": "0.00",
+      "visibility_details": {
+        "has_price": true,
+        "has_stock": true
+      },
+      "price_indexes": {
+        "color_index": "COLOR_INDEX_WITHOUT_INDEX",
+        "external_index_data": {
+          "minimal_price": "",
+          "minimal_price_currency": "RUB",
+          "price_index_value": 0
+        },
+        "ozon_index_data": {
+          "minimal_price": "",
+          "minimal_price_currency": "RUB",
+          "price_index_value": 0
+        },
+        "self_marketplaces_index_data": {
+          "minimal_price": "",
+          "minimal_price_currency": "RUB",
+          "price_index_value": 0
+        }
+      },
+      "images360": [],
+      "is_kgt": false,
+      "color_image": [],
+      "primary_image": [
+        "https://cdn1.ozone.ru/s3/multimedia-1-l/7149597321.jpg"
+      ],
+      "statuses": {
+        "status": "price_sent",
+        "status_failed": "",
+        "moderate_status": "approved",
+        "validation_status": "success",
+        "status_name": "Готов к продаже",
+        "status_description": "Нет на складе",
+        "is_created": true,
+        "status_tooltip": "Товар можно привезти на склад Ozon или указать его количество на своем складе",
+        "status_updated_at": "2024-12-19T17:56:33.984305Z"
+      },
+      "is_super": false,
+      "is_seasonal": false,
+      "promotions": [
+        {
+          "is_enabled": false,
+          "type": "REVIEWS_PROMO"
+        }
+      ],
+      "sku": 1788664414,
+      "availabilities": [
+        {
+          "availability": "AVAILABLE",
+          "reasons": [],
+          "sku": 1788664414,
+          "source": "sds"
+        },
+        {
+          "availability": "HIDDEN",
+          "reasons": [
+            {
+              "id": 117,
+              "human_text": {
+                "text": "Долгое накопление квантов"
+              }
+            }
+          ],
+          "sku": 1788676480,
+          "source": "sds"
+        }
+      ]
+    }
+  ]
+}
