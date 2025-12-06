@@ -1,75 +1,271 @@
-name: Deploy Backend
+name: Deploy Prod
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
-  build:
+  detect-changes:
     runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.set-modules.outputs.modules || '[]' }}
 
     steps:
-      - name: Checkout Repository
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔍 Detect changed modules
+        id: detect
+        uses: tj-actions/changed-files@v45
+        with:
+          base: origin/main
+          fetch_depth: 0
+          json: true
+
+      - name: 📋 Extract modules
+        id: set-modules
+        run: |
+          raw='${{ steps.detect.outputs.all_changed_files_json }}'
+
+          if [ -z "$raw" ]; then
+            echo "⚠️ all_changed_files_json пустой, fallback на all_changed_files"
+            raw='${{ steps.detect.outputs.all_changed_files }}'
+          fi
+
+          clean_json=$(echo "$raw" | sed 's/\\"/"/g')
+          echo "🔍 Очищенный JSON: $clean_json"
+          echo "$clean_json" > temp.json
+
+          modules=$(jq -c '[.[] 
+            | select(test("^(common|domain|authService|ozonApi|userService|notification)/")) 
+            | split("/")[0]] | unique' temp.json)
+
+          modules=$(echo "$modules" | jq -c 'if index("common") == null then . + ["common"] else . end | if index("domain") == null then . + ["domain"] else . end')
+
+          echo "modules=$modules" >> $GITHUB_OUTPUT
+          echo "🔍 Выходной параметр modules: $modules"
+
+      - name: 🔍 Debug all changes
+        run: |
+          echo "all_changed_files_json=${{ steps.detect.outputs.all_changed_files_json }}"
+          echo "all_changed_files=${{ steps.detect.outputs.all_changed_files }}"
+
+  deploy-common:
+    needs: detect-changes
+    if: contains(fromJson(needs.detect-changes.outputs.modules), 'common') || contains(fromJson(needs.detect-changes.outputs.modules), 'domain')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📦 Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
+      - name: 🔐 Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          java-version: "17"
-          distribution: "temurin"
-          cache: "maven"
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Build common + domain (install)
-        run: mvn -B -pl common,domain -am install
-
-      - name: Build backend microservices
-        run: mvn -B -pl authService,ozonApi,userService,notification -am package
-
-      - name: Archive Artifacts
+      - name: 🧱 Add server to known_hosts
         run: |
-          mkdir -p artifacts
-          cp authService/target/authService-*.jar artifacts/ 2>/dev/null || true
-          cp ozonApi/target/ozonApi-*.jar artifacts/ 2>/dev/null || true
-          cp userService/target/userService-*.jar artifacts/ 2>/dev/null || true
-          cp notification/target/notification-*.jar artifacts/ 2>/dev/null || true
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-artifacts
-          path: artifacts/                     # ← вот и всё! Самый надёжный вариант
+      - name: 🔌 Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
 
-  deploy:
+      - name: Sync common & domain to server
+        run: |
+          rsync -avz --delete --exclude .idea --exclude target ./common/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/common/
+          rsync -avz --delete --exclude .idea --exclude target ./domain/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/domain/
+
+      - name: Install common & domain on server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -e
+            cd ${{ secrets.DEPLOY_PROD_PATH }}/common
+            mvn clean install
+            cd ${{ secrets.DEPLOY_PROD_PATH }}/domain
+            mvn clean install
+          EOF
+
+  deploy-authService:
+    needs: [detect-changes, deploy-common]
+    if: contains(fromJson(needs.detect-changes.outputs.modules), 'authService')
     runs-on: ubuntu-latest
-    needs: build
-    environment: production
-
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-artifacts
-          path: artifacts
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
 
-      - name: Copy JARs to Server
-        uses: appleboy/scp-action@v0.1.4
+      - name: 🔐 Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "artifacts/*.jar"
-          target: "/root/ozonLabeApi/"
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Restart PM2 Services
-        uses: appleboy/ssh-action@v0.1.6
+      - name: 🧱 Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: 🔌 Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+
+      - name: Sync authService to server
+        run: |
+          rsync -avz --delete --exclude .idea --exclude target ./authService/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/authService/
+
+      - name: Build authService on server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -e
+            cd ${{ secrets.DEPLOY_PROD_PATH }}/authService
+            mvn clean -U
+            mvn package
+          EOF
+
+      - name: Restart authService
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -ex
+            cd ${{ secrets.DEPLOY_PROD_PATH }}
+            sudo pm2 delete auth-service || true
+            sudo pm2 start ecosystem.backend.config.js --only auth-service
+            sudo pm2 save
+          EOF
+
+  deploy-ozonApi:
+    needs: [detect-changes, deploy-common]
+    if: contains(fromJson(needs.detect-changes.outputs.modules), 'ozonApi')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd /root/ozonLabeApi/
-            echo "Содержимое artifacts после скачивания:"
-            ls -la artifacts/ || echo "Папка artifacts пуста!"
-            pm2 restart ecosystem.backend.config.js || pm2 start ecosystem.backend.config.js
-            pm2 save
-            echo "Деплой завершён"
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 🧱 Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: 🔌 Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+
+      - name: Sync ozonApi to server
+        run: |
+          rsync -avz --delete --exclude .idea --exclude target ./ozonApi/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/ozonApi/
+
+      - name: Build ozonApi on server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -e
+            cd ${{ secrets.DEPLOY_PROD_PATH }}/ozonApi
+            mvn clean -U
+            mvn package
+          EOF
+
+      - name: Restart ozonApi
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -ex
+            cd ${{ secrets.DEPLOY_PROD_PATH }}
+            sudo pm2 delete ozon-api || true
+            sudo pm2 start ecosystem.backend.config.js --only ozon-api
+            sudo pm2 save
+          EOF
+
+  deploy-userService:
+    needs: [detect-changes, deploy-common]
+    if: contains(fromJson(needs.detect-changes.outputs.modules), 'userService')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 🧱 Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: 🔌 Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+
+      - name: Sync userService to server
+        run: |
+          rsync -avz --delete --exclude .idea --exclude target ./userService/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/userService/
+
+      - name: Build userService on server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -e
+            cd ${{ secrets.DEPLOY_PROD_PATH }}/userService
+            mvn clean -U
+            mvn package
+          EOF
+
+      - name: Restart userService
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -ex
+            cd ${{ secrets.DEPLOY_PROD_PATH }}
+            sudo pm2 delete user-service || true
+            sudo pm2 start ecosystem.backend.config.js --only user-service
+            sudo pm2 save
+          EOF
+
+  deploy-notification:
+    needs: [detect-changes, deploy-common]
+    if: contains(fromJson(needs.detect-changes.outputs.modules), 'notification')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 🧱 Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: 🔌 Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "echo ✅ SSH connected"
+
+      - name: Sync notification to server
+        run: |
+          rsync -avz --delete --exclude .idea --exclude target ./notification/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PROD_PATH }}/notification/
+
+      - name: Build notification on server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -e
+            cd ${{ secrets.DEPLOY_PROD_PATH }}/notification
+            mvn clean -U
+            mvn package
+          EOF
+
+      - name: Restart notification
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            set -ex
+            cd ${{ secrets.DEPLOY_PROD_PATH }}
+            sudo pm2 delete notification-service || true
+            sudo pm2 start ecosystem.backend.config.js --only notification-service
+            sudo pm2 save
+          EOF
