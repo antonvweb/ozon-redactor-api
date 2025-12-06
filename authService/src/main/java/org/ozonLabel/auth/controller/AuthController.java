@@ -123,7 +123,7 @@ public class AuthController {
             if (!refreshToken.equals(user.getRefreshToken()) ||
                     user.getRefreshTokenExpiresAt().isBefore(LocalDateTime.now())) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(ApiResponse.error("Недействительны refresh token"));
+                        .body(ApiResponse.error("Недействительный refresh token"));
             }
 
             String newAccessToken = jwtService.generateToken(email);
