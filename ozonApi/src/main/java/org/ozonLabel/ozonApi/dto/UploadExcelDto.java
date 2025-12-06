@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CreateProductBySizeDto {
-    private String size;
+class UploadExcelDto {
     private Long folderId;
 }

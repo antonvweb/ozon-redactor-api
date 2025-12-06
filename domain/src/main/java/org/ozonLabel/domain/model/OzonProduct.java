@@ -1,8 +1,10 @@
 package org.ozonLabel.domain.model;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import org.hibernate.annotations.DynamicUpdate;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -10,7 +12,9 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "ozon_products")
 @Data
-@DynamicUpdate
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class OzonProduct {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -135,7 +139,7 @@ public class OzonProduct {
     @Column(name = "folder_id")
     private Long folderId;
 
-    @Column(length = 50)
+    @Column(name = "size", length = 100)
     private String size;
 
     @Column(name = "created_at", updatable = false)

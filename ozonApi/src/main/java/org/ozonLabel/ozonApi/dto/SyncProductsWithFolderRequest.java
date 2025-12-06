@@ -9,7 +9,9 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CreateProductBySizeDto {
-    private String size;
+class SyncProductsWithFolderRequest {
+    private java.util.Map<String, Object> filter;
+    private String lastId;
+    private Integer limit;
     private Long folderId;
 }

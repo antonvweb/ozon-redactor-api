@@ -3,14 +3,15 @@ package org.ozonLabel.ozonApi.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ozonLabel.domain.model.User;
-import org.ozonLabel.domain.repository.OzonProductRepository;
-import org.ozonLabel.domain.repository.UserRepository;
+import org.ozonLabel.domain.repository.ProductFolderRepository;
 import org.ozonLabel.ozonApi.dto.*;
 import org.ozonLabel.ozonApi.exception.OzonApiCredentialsMissingException;
 import org.ozonLabel.ozonApi.exception.OzonApiException;
 import org.ozonLabel.ozonApi.exception.UserNotFoundException;
 import org.ozonLabel.domain.model.OzonProduct;
+import org.ozonLabel.domain.model.User;
+import org.ozonLabel.domain.repository.OzonProductRepository;
+import org.ozonLabel.domain.repository.UserRepository;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -35,23 +36,27 @@ public class OzonService {
 
     private final UserRepository userRepository;
     private final OzonProductRepository ozonProductRepository;
+    private final ProductFolderRepository folderRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    @Transactional
-    public SyncProductsResponse syncProducts(Long userId, SyncProductsRequest request) {
-        return syncProducts(userId, request, null);
-    }
-
+    /**
+     * Синхронизация товаров с указанием папки
+     */
     @Transactional
     public SyncProductsResponse syncProducts(Long userId, SyncProductsRequest request, Long folderId) {
-        // 1. Получаем пользователя и проверяем наличие API ключей
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("Пользователь с ID " + userId + " не найден"));
 
         validateUserCredentials(user);
 
-        // 2. Получаем список product_id из /v3/product/list
+        // Проверяем существование папки, если указана
+        if (folderId != null) {
+            if (!folderRepository.existsByUserIdAndId(userId, folderId)) {
+                throw new IllegalArgumentException("Папка не найдена");
+            }
+        }
+
         ProductListResponse productListResponse = getProductList(user, request);
 
         if (productListResponse.getResult() == null ||
@@ -67,7 +72,6 @@ public class OzonService {
         List<ProductListItem> items = productListResponse.getResult().getItems();
         List<ProductFrontendResponse> frontendResponses = new ArrayList<>();
 
-        // 3. Для каждого product_id получаем детальную информацию
         for (ProductListItem item : items) {
             try {
                 ProductInfoResponse productInfoResponse = getProductInfo(user, item.getProductId());
@@ -75,10 +79,9 @@ public class OzonService {
                 if (productInfoResponse.getItems() != null && !productInfoResponse.getItems().isEmpty()) {
                     ProductInfo productInfo = productInfoResponse.getItems().get(0);
 
-                    // 4. Сохраняем в БД с указанием папки
+                    // Сохраняем с указанием папки
                     OzonProduct savedProduct = saveProduct(userId, productInfo, folderId);
 
-                    // 5. Формируем ответ для фронтенда
                     ProductFrontendResponse frontendResponse = mapToFrontendResponse(productInfo);
                     frontendResponses.add(frontendResponse);
                 }
@@ -87,11 +90,22 @@ public class OzonService {
             }
         }
 
+        log.info("Синхронизировано {} товаров в папку {} для пользователя {}",
+                frontendResponses.size(), folderId, userId);
+
         return SyncProductsResponse.builder()
                 .products(frontendResponses)
                 .total(productListResponse.getResult().getTotal())
                 .message("Синхронизация завершена успешно")
                 .build();
+    }
+
+    /**
+     * Синхронизация товаров (старый метод без папки)
+     */
+    @Transactional
+    public SyncProductsResponse syncProducts(Long userId, SyncProductsRequest request) {
+        return syncProducts(userId, request, null);
     }
 
     private void validateUserCredentials(User user) {
@@ -165,11 +179,6 @@ public class OzonService {
     }
 
     @Transactional
-    private OzonProduct saveProduct(Long userId, ProductInfo productInfo) {
-        return saveProduct(userId, productInfo, null);
-    }
-
-    @Transactional
     private OzonProduct saveProduct(Long userId, ProductInfo productInfo, Long folderId) {
         try {
             Optional<OzonProduct> existingProduct = ozonProductRepository
@@ -179,6 +188,7 @@ public class OzonService {
 
             product.setUserId(userId);
             product.setProductId(productInfo.getId());
+            product.setFolderId(folderId); // Устанавливаем папку
             product.setName(productInfo.getName());
             product.setOfferId(productInfo.getOfferId());
             product.setIsArchived(productInfo.getIsArchived());
@@ -217,11 +227,6 @@ public class OzonService {
             product.setPromotions(toJson(productInfo.getPromotions()));
             product.setSku(productInfo.getSku());
             product.setAvailabilities(toJson(productInfo.getAvailabilities()));
-
-            // Устанавливаем папку если указана
-            if (folderId != null) {
-                product.setFolderId(folderId);
-            }
 
             return ozonProductRepository.save(product);
         } catch (Exception e) {

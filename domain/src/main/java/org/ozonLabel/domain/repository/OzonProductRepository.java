@@ -56,4 +56,9 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
     Long countByUserIdAndFolderId(Long userId, Long folderId);
 
     Long countByUserIdAndFolderIdIsNull(Long userId);
+
+    // Поиск по размеру
+    List<OzonProduct> findByUserIdAndSize(Long userId, String size);
+
+    Page<OzonProduct> findByUserIdAndSize(Long userId, String size, Pageable pageable);
 }
