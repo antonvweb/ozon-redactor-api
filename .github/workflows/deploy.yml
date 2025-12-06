@@ -74,7 +74,7 @@ jobs:
             --exclude='.idea' \
             --exclude='*.log' \
             --exclude='node_modules' \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/
 
   deploy-common:
     needs: [detect-changes, deploy-project-root]
