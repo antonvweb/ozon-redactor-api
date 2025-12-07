@@ -2,6 +2,8 @@ package org.ozonLabel.user.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.ozonLabel.common.exception.BadRequestException;
+import org.ozonLabel.common.exception.BusinessException;
 import org.ozonLabel.user.dto.*;
 import org.ozonLabel.domain.model.CompanyAuditLog;
 import org.ozonLabel.domain.model.CompanyMember;
@@ -60,7 +62,7 @@ public class CompanyService {
             boolean hasActive = invitationRepository.existsByCompanyOwnerIdAndInviteeEmailAndStatus(
                     owner.getId(), request.getEmail(), Invitation.InvitationStatus.PENDING);
             if (hasActive) {
-                throw new IllegalArgumentException("Приглашение для этого email уже отправлено");
+                throw new BadRequestException("Приглашение для этого email уже отправлено");
             }
         }
 
@@ -68,7 +70,7 @@ public class CompanyService {
             boolean hasActive = invitationRepository.existsByCompanyOwnerIdAndInviteePhoneAndStatus(
                     owner.getId(), request.getPhone(), Invitation.InvitationStatus.PENDING);
             if (hasActive) {
-                throw new IllegalArgumentException("Приглашение для этого телефона уже отправлено");
+                throw new BadRequestException("Приглашение для этого телефона уже отправлено");
             }
         }
 
