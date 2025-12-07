@@ -45,7 +45,6 @@ public class CompanyService {
     /**
      * Отправить приглашение пользователю
      */
-    @Transactional
     public InviteUserResponseDto inviteUser(String ownerEmail, InviteUserRequestDto request) {
         if (request.isEmpty()) {
             throw new BadRequestException("Необходимо указать email или телефон");
