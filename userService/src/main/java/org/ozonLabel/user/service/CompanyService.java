@@ -133,6 +133,108 @@ public class CompanyService {
                 .build();
     }
 
+    @Transactional
+    public void acceptInvitationById(Long invitationId, String acceptingUserEmail) {
+        Invitation invitation = invitationRepository.findById(invitationId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Приглашение не найдено"));
+
+        if (invitation.getStatus() != Invitation.InvitationStatus.PENDING) {
+            throw new BadRequestException("Приглашение уже использовано или отменено");
+        }
+
+        if (invitation.isExpired()) {
+            invitation.setStatus(Invitation.InvitationStatus.EXPIRED);
+            invitationRepository.save(invitation);
+            throw new BadRequestException("Срок действия приглашения истек");
+        }
+
+        User acceptingUser = userRepository.findByEmail(acceptingUserEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+
+        // Проверка email/phone
+        boolean matches = false;
+        if (invitation.getInviteeEmail() != null &&
+                invitation.getInviteeEmail().equalsIgnoreCase(acceptingUser.getEmail())) {
+            matches = true;
+        }
+        if (invitation.getInviteePhone() != null &&
+                invitation.getInviteePhone().equals(acceptingUser.getPhone())) {
+            matches = true;
+        }
+        if (!matches) {
+            throw new BadRequestException("Это приглашение предназначено другому пользователю");
+        }
+
+        // Проверка, что ещё не в компании
+        if (companyMemberRepository.existsByCompanyOwnerIdAndMemberUserId(
+                invitation.getCompanyOwnerId(), acceptingUser.getId())) {
+            throw new BadRequestException("Вы уже являетесь членом этой компании");
+        }
+
+        // Присоединяем
+        CompanyMember member = new CompanyMember();
+        member.setCompanyOwnerId(invitation.getCompanyOwnerId());
+        member.setMemberUserId(acceptingUser.getId());
+        member.setRole(invitation.getRole());
+        companyMemberRepository.save(member);
+
+        invitation.setStatus(Invitation.InvitationStatus.ACCEPTED);
+        invitation.setAcceptedAt(LocalDateTime.now());
+        invitation.setAcceptedByUserId(acceptingUser.getId());
+        invitationRepository.save(invitation);
+
+        // Уведомляем владельца
+        User owner = userRepository.findById(invitation.getCompanyOwnerId()).orElse(null);
+        if (owner != null) {
+            notificationService.createInvitationAcceptedNotification(
+                    owner.getId(),
+                    acceptingUser.getName(),
+                    acceptingUser.getId(),
+                    owner.getCompanyName() != null ? owner.getCompanyName() : "вашу компанию"
+            );
+        }
+
+        log.info("Пользователь {} принял приглашение по ID {}", acceptingUserEmail, invitationId);
+    }
+
+    @Transactional
+    public void rejectInvitationById(Long invitationId, String rejectingUserEmail) {
+        Invitation invitation = invitationRepository.findById(invitationId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Приглашение не найдено"));
+
+        if (invitation.getStatus() != Invitation.InvitationStatus.PENDING) {
+            throw new BadRequestException("Приглашение уже обработано");
+        }
+
+        User user = userRepository.findByEmail(rejectingUserEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+
+        boolean matches = false;
+        if (invitation.getInviteeEmail() != null &&
+                invitation.getInviteeEmail().equalsIgnoreCase(user.getEmail())) {
+            matches = true;
+        }
+        if (invitation.getInviteePhone() != null &&
+                invitation.getInviteePhone().equals(user.getPhone())) {
+            matches = true;
+        }
+        if (!matches) {
+            throw new BadRequestException("Это приглашение предназначено другому пользователю");
+        }
+
+        invitation.setStatus(Invitation.InvitationStatus.CANCELLED);
+        invitationRepository.save(invitation);
+
+        User owner = userRepository.findById(invitation.getCompanyOwnerId()).orElse(null);
+        if (owner != null) {
+            notificationService.createInvitationRejectedNotification(
+                    owner.getId(),
+                    user.getName(),
+                    owner.getCompanyName() != null ? owner.getCompanyName() : "вашу компанию"
+            );
+        }
+    }
+
     /**
      * Отменить приглашение
      */

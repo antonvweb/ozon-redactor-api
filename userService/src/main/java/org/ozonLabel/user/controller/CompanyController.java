@@ -95,6 +95,38 @@ public class CompanyController {
     }
 
     /**
+     * Принять приглашение из уведомления (по invitationId)
+     */
+    @PostMapping("/invitation/{invitationId}/accept")
+    public ResponseEntity<ApiResponse> acceptInvitationById(
+            @PathVariable Long invitationId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Пользователь {} принимает приглашение по ID {}", userEmail, invitationId);
+
+        companyService.acceptInvitationById(invitationId, userEmail);
+
+        return ResponseEntity.ok(ApiResponse.success("Вы успешно присоединились к компании!"));
+    }
+
+    /**
+     * Отклонить приглашение из уведомления (по invitationId)
+     */
+    @PostMapping("/invitation/{invitationId}/reject")
+    public ResponseEntity<ApiResponse> rejectInvitationById(
+            @PathVariable Long invitationId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Пользователь {} отклоняет приглашение по ID {}", userEmail, invitationId);
+
+        companyService.rejectInvitationById(invitationId, userEmail);
+
+        return ResponseEntity.ok(ApiResponse.success("Приглашение отклонено"));
+    }
+
+    /**
      * Получить список всех компаний, к которым привязан пользователь
      */
     @GetMapping("/my-companies")
