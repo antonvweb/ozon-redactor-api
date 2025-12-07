@@ -48,14 +48,14 @@ public class CompanyService {
     @Transactional
     public InviteUserResponseDto inviteUser(String ownerEmail, InviteUserRequestDto request) {
         if (request.isEmpty()) {
-            throw new IllegalArgumentException("Необходимо указать email или телефон");
+            throw new BadRequestException("Необходимо указать email или телефон");
         }
 
         User owner = userRepository.findByEmail(ownerEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Владелец не найден"));
 
         if (request.getEmail() != null && request.getEmail().equals(ownerEmail)) {
-            throw new IllegalArgumentException("Вы не можете пригласить самого себя");
+            throw new BadRequestException("Вы не можете пригласить самого себя");
         }
 
         if (request.getEmail() != null) {
@@ -153,7 +153,7 @@ public class CompanyService {
         }
 
         if (invitation.getStatus() != Invitation.InvitationStatus.PENDING) {
-            throw new IllegalArgumentException("Можно отменить только активные приглашения");
+            throw new BadRequestException("Можно отменить только активные приглашения");
         }
 
         invitation.setStatus(Invitation.InvitationStatus.CANCELLED);
@@ -178,13 +178,13 @@ public class CompanyService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Приглашение не найдено"));
 
         if (invitation.getStatus() != Invitation.InvitationStatus.PENDING) {
-            throw new IllegalArgumentException("Приглашение уже использовано или отменено");
+            throw new BadRequestException("Приглашение уже использовано или отменено");
         }
 
         if (invitation.isExpired()) {
             invitation.setStatus(Invitation.InvitationStatus.EXPIRED);
             invitationRepository.save(invitation);
-            throw new IllegalArgumentException("Срок действия приглашения истек");
+            throw new BadRequestException("Срок действия приглашения истек");
         }
 
         User acceptingUser = userRepository.findByEmail(acceptingUserEmail)
@@ -201,14 +201,14 @@ public class CompanyService {
         }
 
         if (!contactMatches) {
-            throw new IllegalArgumentException("Приглашение предназначено для другого пользователя");
+            throw new BadRequestException("Приглашение предназначено для другого пользователя");
         }
 
         boolean alreadyMember = companyMemberRepository.existsByCompanyOwnerIdAndMemberUserId(
                 invitation.getCompanyOwnerId(), acceptingUser.getId());
 
         if (alreadyMember) {
-            throw new IllegalArgumentException("Вы уже являетесь членом этой компании");
+            throw new BadRequestException("Вы уже являетесь членом этой компании");
         }
 
         CompanyMember member = new CompanyMember();
@@ -255,13 +255,13 @@ public class CompanyService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Приглашение не найдено"));
 
         if (invitation.getStatus() != Invitation.InvitationStatus.PENDING) {
-            throw new IllegalArgumentException("Приглашение уже использовано или отменено");
+            throw new BadRequestException("Приглашение уже использовано или отменено");
         }
 
         if (invitation.isExpired()) {
             invitation.setStatus(Invitation.InvitationStatus.EXPIRED);
             invitationRepository.save(invitation);
-            throw new IllegalArgumentException("Срок действия приглашения истек");
+            throw new BadRequestException("Срок действия приглашения истек");
         }
 
         User rejectingUser = userRepository.findByEmail(rejectingUserEmail)
