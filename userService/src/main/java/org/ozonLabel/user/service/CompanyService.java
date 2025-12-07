@@ -91,7 +91,7 @@ public class CompanyService {
 
         // Создаем уведомление вместо email
         if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
-            User invitedUser = userRepository.findByEmail(request.getEmail()).orElse(null);
+            User invitedUser = userRepository.findByEmailCaseInsensitive(request.getEmail().trim()).orElse(null);
             if (invitedUser != null) {
                 // Пользователь уже зарегистрирован - создаем уведомление
                 notificationService.createInvitationNotification(
