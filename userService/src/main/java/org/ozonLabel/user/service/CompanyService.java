@@ -63,6 +63,17 @@ public class CompanyService {
             if (hasActive) {
                 throw new BadRequestException("Приглашение для этого email уже отправлено");
             }
+
+            // ←←←←←←←←←←←←←←←←← НОВАЯ ПРОВЕРКА ЗДЕСЬ ←←←←←←←←←←←←←←←←←
+            User targetUser = userRepository.findByEmailCaseInsensitive(request.getEmail().trim()).orElse(null);
+            if (targetUser != null) {
+                boolean alreadyMember = companyMemberRepository.existsByCompanyOwnerIdAndMemberUserId(
+                        owner.getId(), targetUser.getId());
+                if (alreadyMember) {
+                    throw new BadRequestException("Этот пользователь уже состоит в вашей компании");
+                }
+            }
+            // ←←←←←←←←←←←←←←←←← КОНЕЦ НОВОЙ ПРОВЕРКИ ←←←←←←←←←←←←←←←←←
         }
 
         if (request.getPhone() != null) {
@@ -71,6 +82,17 @@ public class CompanyService {
             if (hasActive) {
                 throw new BadRequestException("Приглашение для этого телефона уже отправлено");
             }
+
+            // ←←←←←←←←←←←←←← ПРАВИЛЬНАЯ ПРОВЕРКА ПО ТЕЛЕФОНУ ←←←←←←←←←←←←←
+            User targetUser = userRepository.findByPhone(request.getPhone().trim()).orElse(null);
+            if (targetUser != null) {
+                boolean alreadyMember = companyMemberRepository.existsByCompanyOwnerIdAndMemberUserId(
+                        owner.getId(), targetUser.getId());
+                if (alreadyMember) {
+                    throw new BadRequestException("Этот пользователь уже состоит в вашей компании");
+                }
+            }
+            // ←←←←←←←←←←←←← КОНЕЦ ПРАВИЛЬНОЙ ПРОВЕРКИ ←←←←←←←←←←←←←
         }
 
         String token = UUID.randomUUID().toString();
