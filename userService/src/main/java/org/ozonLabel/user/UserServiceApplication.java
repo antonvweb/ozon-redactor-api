@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"org.ozonLabel.user", "org.ozonLabel.common"})
 @EnableJpaRepositories(basePackages = {
         "org.ozonLabel.user.repository",
         "org.ozonLabel.ozonApi.repository",
