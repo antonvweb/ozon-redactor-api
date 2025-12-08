@@ -26,15 +26,6 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
-    // Любые непойманные ошибки — 500, но без stack trace в продакшене
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse> handleAll(Exception ex) {
-        // В продакшене можно логгировать ex, но не показывать клиенту
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Внутренняя ошибка сервера"));
-    }
-
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiResponse> handleResourceNotFound(ResourceNotFoundException ex) {
         log.warn("Resource not found: {}", ex.getMessage());
