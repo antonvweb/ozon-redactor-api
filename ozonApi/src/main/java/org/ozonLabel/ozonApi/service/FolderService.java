@@ -1,6 +1,5 @@
 package org.ozonLabel.ozonApi.service;
 
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.domain.model.OzonProduct;
@@ -10,10 +9,11 @@ import org.ozonLabel.domain.repository.OzonProductRepository;
 import org.ozonLabel.domain.repository.ProductFolderRepository;
 import org.ozonLabel.domain.repository.UserRepository;
 import org.ozonLabel.ozonApi.dto.*;
-import org.springframework.http.HttpStatus;
+import org.ozonLabel.ozonApi.exception.*;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,24 +28,18 @@ public class FolderService {
     private final OzonProductRepository productRepository;
     private final UserRepository userRepository;
 
-    /**
-     * Создать новую папку
-     */
     @Transactional
+    @CacheEvict(value = "folderTrees", key = "#userEmail")
     public FolderResponseDto createFolder(String userEmail, CreateFolderDto dto) {
         User user = getUserByEmail(userEmail);
 
-        // Проверяем, что родительская папка существует и принадлежит пользователю
         if (dto.getParentFolderId() != null) {
-            if (!folderRepository.existsByUserIdAndId(user.getId(), dto.getParentFolderId())) {
-                throw new IllegalArgumentException("Родительская папка не найдена");
-            }
+            validateFolderOwnership(user.getId(), dto.getParentFolderId());
         }
 
-        // Проверяем уникальность имени в рамках родительской папки
         if (folderRepository.findByUserIdAndNameAndParentFolderId(
                 user.getId(), dto.getName(), dto.getParentFolderId()).isPresent()) {
-            throw new IllegalArgumentException("Папка с таким именем уже существует");
+            throw new InvalidFolderOperationException("Folder with this name already exists");
         }
 
         ProductFolder folder = ProductFolder.builder()
@@ -58,36 +52,19 @@ public class FolderService {
                 .build();
 
         folder = folderRepository.save(folder);
-
-        log.info("Создана папка {} для пользователя {}", folder.getName(), userEmail);
+        log.info("Created folder '{}' for user {}", folder.getName(), userEmail);
 
         return mapToDto(folder);
     }
 
-    /**
-     * Обновить папку
-     */
     @Transactional
+    @CacheEvict(value = "folderTrees", key = "#userEmail")
     public FolderResponseDto updateFolder(String userEmail, Long folderId, UpdateFolderDto dto) {
         User user = getUserByEmail(userEmail);
+        ProductFolder folder = getFolderWithAccessCheck(folderId, user.getId());
 
-        ProductFolder folder = folderRepository.findById(folderId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Папка не найдена"));
-
-        if (!folder.getUserId().equals(user.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Нет доступа к этой папке");
-        }
-
-        // Проверяем, не пытается ли пользователь переместить папку в саму себя или в свою подпапку
         if (dto.getParentFolderId() != null) {
-            if (dto.getParentFolderId().equals(folderId)) {
-                throw new IllegalArgumentException("Нельзя переместить папку в саму себя");
-            }
-
-            // Проверяем, не является ли целевая папка подпапкой текущей
-            if (isSubfolderOf(dto.getParentFolderId(), folderId)) {
-                throw new IllegalArgumentException("Нельзя переместить папку в свою подпапку");
-            }
+            validateFolderMove(folderId, dto.getParentFolderId());
         }
 
         if (dto.getName() != null) folder.setName(dto.getName());
@@ -97,57 +74,28 @@ public class FolderService {
         if (dto.getPosition() != null) folder.setPosition(dto.getPosition());
 
         folder = folderRepository.save(folder);
-
-        log.info("Обновлена папка {} для пользователя {}", folderId, userEmail);
+        log.info("Updated folder {} for user {}", folderId, userEmail);
 
         return mapToDto(folder);
     }
 
-    /**
-     * Удалить папку
-     */
     @Transactional
+    @CacheEvict(value = "folderTrees", key = "#userEmail")
     public void deleteFolder(String userEmail, Long folderId, boolean moveProductsToParent) {
         User user = getUserByEmail(userEmail);
-
-        ProductFolder folder = folderRepository.findById(folderId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Папка не найдена"));
-
-        if (!folder.getUserId().equals(user.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Нет доступа к этой папке");
-        }
+        ProductFolder folder = getFolderWithAccessCheck(folderId, user.getId());
 
         if (moveProductsToParent) {
-            // Перемещаем товары в родительскую папку
-            List<OzonProduct> products = productRepository.findByUserIdAndFolderId(user.getId(), folderId);
-            products.forEach(product -> product.setFolderId(folder.getParentFolderId()));
-            productRepository.saveAll(products);
-
-            // Перемещаем подпапки
-            List<ProductFolder> subfolders = folderRepository.findByUserIdAndParentFolderIdOrderByPositionAsc(
-                    user.getId(), folderId);
-            subfolders.forEach(subfolder -> subfolder.setParentFolderId(folder.getParentFolderId()));
-            folderRepository.saveAll(subfolders);
+            moveItemsToParent(user.getId(), folderId, folder.getParentFolderId());
         } else {
-            // Удаляем все товары из папки и подпапок
-            List<Long> allFolderIds = folderRepository.getAllSubfolderIds(folderId);
-            allFolderIds.add(folderId);
-
-            for (Long folId : allFolderIds) {
-                List<OzonProduct> products = productRepository.findByUserIdAndFolderId(user.getId(), folId);
-                products.forEach(product -> product.setFolderId(null));
-                productRepository.saveAll(products);
-            }
+            clearFolderAndSubfolders(user.getId(), folderId);
         }
 
         folderRepository.deleteById(folderId);
-
-        log.info("Удалена папка {} для пользователя {}", folderId, userEmail);
+        log.info("Deleted folder {} for user {}", folderId, userEmail);
     }
 
-    /**
-     * Получить дерево папок
-     */
+    @Cacheable(value = "folderTrees", key = "#userEmail")
     public List<FolderTreeDto> getFolderTree(String userEmail) {
         User user = getUserByEmail(userEmail);
 
@@ -159,88 +107,59 @@ public class FolderService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Получить папки по уровню
-     */
     public List<FolderResponseDto> getFolders(String userEmail, Long parentFolderId) {
         User user = getUserByEmail(userEmail);
 
-        List<ProductFolder> folders;
-        if (parentFolderId == null) {
-            folders = folderRepository.findByUserIdAndParentFolderIdIsNullOrderByPositionAsc(user.getId());
-        } else {
-            folders = folderRepository.findByUserIdAndParentFolderIdOrderByPositionAsc(user.getId(), parentFolderId);
-        }
+        List<ProductFolder> folders = parentFolderId == null
+                ? folderRepository.findByUserIdAndParentFolderIdIsNullOrderByPositionAsc(user.getId())
+                : folderRepository.findByUserIdAndParentFolderIdOrderByPositionAsc(user.getId(), parentFolderId);
 
         return folders.stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Получить информацию о папке
-     */
     public FolderResponseDto getFolder(String userEmail, Long folderId) {
         User user = getUserByEmail(userEmail);
-
-        ProductFolder folder = folderRepository.findById(folderId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Папка не найдена"));
-
-        if (!folder.getUserId().equals(user.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Нет доступа к этой папке");
-        }
-
+        ProductFolder folder = getFolderWithAccessCheck(folderId, user.getId());
         return mapToDto(folder);
     }
 
-    /**
-     * Переместить товары в папку
-     */
     @Transactional
     public void moveProductsToFolder(String userEmail, MoveProductsToFolderDto dto) {
         User user = getUserByEmail(userEmail);
 
-        // Проверяем, что папка существует и принадлежит пользователю
         if (dto.getTargetFolderId() != null) {
-            if (!folderRepository.existsByUserIdAndId(user.getId(), dto.getTargetFolderId())) {
-                throw new IllegalArgumentException("Целевая папка не найдена");
-            }
+            validateFolderOwnership(user.getId(), dto.getTargetFolderId());
         }
 
+        // Fetch all products in one query
         List<OzonProduct> products = productRepository.findAllById(dto.getProductIds());
 
-        // Проверяем, что все товары принадлежат пользователю
-        boolean allBelongToUser = products.stream()
-                .allMatch(product -> product.getUserId().equals(user.getId()));
+        // Validate all products belong to user
+        boolean allValid = products.stream()
+                .allMatch(p -> p.getUserId().equals(user.getId()));
 
-        if (!allBelongToUser) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Некоторые товары вам не принадлежат");
+        if (!allValid) {
+            throw new FolderAccessDeniedException("Some products don't belong to you");
         }
 
-        products.forEach(product -> product.setFolderId(dto.getTargetFolderId()));
-        productRepository.saveAll(products);
+        // Use bulk update instead of saveAll
+        int updated = productRepository.bulkMoveProductsToFolder(
+                dto.getProductIds(),
+                user.getId(),
+                dto.getTargetFolderId()
+        );
 
-        log.info("Перемещено {} товаров в папку {} для пользователя {}",
-                products.size(), dto.getTargetFolderId(), userEmail);
+        log.info("Moved {} products to folder {} for user {}",
+                updated, dto.getTargetFolderId(), userEmail);
     }
 
-    /**
-     * Получить путь к папке (breadcrumb)
-     */
     public List<FolderPathDto> getFolderPath(String userEmail, Long folderId) {
         User user = getUserByEmail(userEmail);
+        ProductFolder folder = getFolderWithAccessCheck(folderId, user.getId());
 
-        ProductFolder folder = folderRepository.findById(folderId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Папка не найдена"));
-
-        if (!folder.getUserId().equals(user.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Нет доступа к этой папке");
-        }
-
-        List<String> pathNames = folderRepository.getFolderPath(folderId);
         List<FolderPathDto> path = new ArrayList<>();
-
-        // Строим путь от корня к текущей папке
         ProductFolder current = folder;
         int level = 0;
 
@@ -251,15 +170,15 @@ public class FolderService {
                     .level(level++)
                     .build());
 
-            if (current.getParentFolderId() != null) {
-                current = folderRepository.findById(current.getParentFolderId()).orElse(null);
-            } else {
-                current = null;
-            }
+            current = current.getParentFolderId() != null
+                    ? folderRepository.findById(current.getParentFolderId()).orElse(null)
+                    : null;
         }
 
         return path;
     }
+
+    // Private helper methods
 
     private FolderTreeDto buildFolderTree(ProductFolder folder, Long userId) {
         List<ProductFolder> subfolders = folderRepository
@@ -281,7 +200,8 @@ public class FolderService {
     }
 
     private FolderResponseDto mapToDto(ProductFolder folder) {
-        Long productsCount = productRepository.countByUserIdAndFolderId(folder.getUserId(), folder.getId());
+        Long productsCount = productRepository.countByUserIdAndFolderId(
+                folder.getUserId(), folder.getId());
         Long subfoldersCount = folderRepository.countByUserIdAndParentFolderId(
                 folder.getUserId(), folder.getId());
 
@@ -300,6 +220,33 @@ public class FolderService {
                 .build();
     }
 
+    private ProductFolder getFolderWithAccessCheck(Long folderId, Long userId) {
+        ProductFolder folder = folderRepository.findById(folderId)
+                .orElseThrow(() -> new FolderNotFoundException("Folder not found"));
+
+        if (!folder.getUserId().equals(userId)) {
+            throw new FolderAccessDeniedException("Access denied to this folder");
+        }
+
+        return folder;
+    }
+
+    private void validateFolderOwnership(Long userId, Long folderId) {
+        if (!folderRepository.existsByUserIdAndId(userId, folderId)) {
+            throw new FolderNotFoundException("Folder not found");
+        }
+    }
+
+    private void validateFolderMove(Long folderId, Long targetParentId) {
+        if (folderId.equals(targetParentId)) {
+            throw new InvalidFolderOperationException("Cannot move folder into itself");
+        }
+
+        if (isSubfolderOf(targetParentId, folderId)) {
+            throw new InvalidFolderOperationException("Cannot move folder into its subfolder");
+        }
+    }
+
     private boolean isSubfolderOf(Long potentialSubfolderId, Long parentId) {
         ProductFolder folder = folderRepository.findById(potentialSubfolderId).orElse(null);
 
@@ -313,8 +260,32 @@ public class FolderService {
         return false;
     }
 
+    private void moveItemsToParent(Long userId, Long folderId, Long parentFolderId) {
+        // Move products
+        List<OzonProduct> products = productRepository.findByUserIdAndFolderId(userId, folderId);
+        products.forEach(p -> p.setFolderId(parentFolderId));
+        productRepository.saveAll(products);
+
+        // Move subfolders
+        List<ProductFolder> subfolders = folderRepository
+                .findByUserIdAndParentFolderIdOrderByPositionAsc(userId, folderId);
+        subfolders.forEach(sf -> sf.setParentFolderId(parentFolderId));
+        folderRepository.saveAll(subfolders);
+    }
+
+    private void clearFolderAndSubfolders(Long userId, Long folderId) {
+        List<Long> allFolderIds = folderRepository.getAllSubfolderIds(folderId);
+        allFolderIds.add(folderId);
+
+        for (Long folId : allFolderIds) {
+            List<OzonProduct> products = productRepository.findByUserIdAndFolderId(userId, folId);
+            products.forEach(p -> p.setFolderId(null));
+            productRepository.saveAll(products);
+        }
+    }
+
     private User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
     }
 }

@@ -3,6 +3,7 @@ package org.ozonLabel.user.service;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.ozonLabel.common.exception.ResourceNotFoundException;
 import org.ozonLabel.user.dto.AuditLogEntryDto;
 import org.ozonLabel.user.dto.AuditLogResponseDto;
 import org.ozonLabel.domain.model.CompanyAuditLog;
@@ -12,12 +13,10 @@ import org.ozonLabel.domain.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,7 @@ public class AuditLogService {
     private final UserRepository userRepository;
 
     /**
-     * Записать действие в лог
+     * Log action with proper error handling
      */
     @Transactional
     public void logAction(Long companyOwnerId, Long userId, CompanyAuditLog.AuditAction action,
@@ -51,26 +50,21 @@ public class AuditLogService {
 
             auditLogRepository.save(logEntry);
 
-            log.info("Audit log created: {} by user {} in company {}",
+            log.debug("Audit log created: {} by user {} in company {}",
                     action, userId, companyOwnerId);
 
         } catch (Exception e) {
-            log.error("Failed to create audit log", e);
+            // Log error but don't fail the main operation
+            log.error("Failed to create audit log for action {} by user {} in company {}",
+                    action, userId, companyOwnerId, e);
         }
-
     }
 
-    /**
-     * Записать действие (упрощенная версия)
-     */
     @Transactional
     public void logAction(Long companyOwnerId, Long userId, CompanyAuditLog.AuditAction action) {
         logAction(companyOwnerId, userId, action, null, null, null);
     }
 
-    /**
-     * Записать действие с деталями
-     */
     @Transactional
     public void logAction(Long companyOwnerId, Long userId, CompanyAuditLog.AuditAction action,
                           Map<String, Object> details) {
@@ -78,21 +72,29 @@ public class AuditLogService {
     }
 
     /**
-     * Получить историю действий компании
+     * Get company audit log with N+1 problem fixed
      */
     public AuditLogResponseDto getCompanyAuditLog(String userEmail, Long companyOwnerId,
                                                   int page, int size) {
-        User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
-
-        // Проверка прав доступа выполняется на уровне контроллера
+        userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User"));
 
         Pageable pageable = PageRequest.of(page, size);
         Page<CompanyAuditLog> logPage = auditLogRepository
                 .findByCompanyOwnerIdOrderByCreatedAtDesc(companyOwnerId, pageable);
 
+        // Collect all user IDs
+        List<Long> userIds = logPage.getContent().stream()
+                .map(CompanyAuditLog::getUserId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Fetch all users in one query
+        Map<Long, User> userMap = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
         List<AuditLogEntryDto> logs = logPage.getContent().stream()
-                .map(this::mapToDto)
+                .map(log -> mapToDto(log, userMap))
                 .collect(Collectors.toList());
 
         return AuditLogResponseDto.builder()
@@ -104,7 +106,7 @@ public class AuditLogService {
     }
 
     /**
-     * Получить историю действий конкретного пользователя
+     * Get user audit log with N+1 problem fixed
      */
     public AuditLogResponseDto getUserAuditLog(String requesterEmail, Long companyOwnerId,
                                                Long targetUserId, int page, int size) {
@@ -112,8 +114,13 @@ public class AuditLogService {
         Page<CompanyAuditLog> logPage = auditLogRepository
                 .findByCompanyOwnerIdAndUserIdOrderByCreatedAtDesc(companyOwnerId, targetUserId, pageable);
 
+        User targetUser = userRepository.findById(targetUserId).orElse(null);
+        Map<Long, User> userMap = targetUser != null
+                ? Map.of(targetUserId, targetUser)
+                : Map.of();
+
         List<AuditLogEntryDto> logs = logPage.getContent().stream()
-                .map(this::mapToDto)
+                .map(log -> mapToDto(log, userMap))
                 .collect(Collectors.toList());
 
         return AuditLogResponseDto.builder()
@@ -124,32 +131,44 @@ public class AuditLogService {
                 .build();
     }
 
-    /**
-     * Получить последние действия
-     */
     public List<AuditLogEntryDto> getRecentActions(Long companyOwnerId) {
         List<CompanyAuditLog> recentLogs = auditLogRepository
                 .findTop10ByCompanyOwnerIdOrderByCreatedAtDesc(companyOwnerId);
 
+        // Fetch users in batch
+        List<Long> userIds = recentLogs.stream()
+                .map(CompanyAuditLog::getUserId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, User> userMap = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
         return recentLogs.stream()
-                .map(this::mapToDto)
+                .map(log -> mapToDto(log, userMap))
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Получить историю по сущности
-     */
     public List<AuditLogEntryDto> getEntityHistory(Long companyOwnerId, String entityType, Long entityId) {
         List<CompanyAuditLog> logs = auditLogRepository
                 .findByEntityOrderByCreatedAtDesc(companyOwnerId, entityType, entityId);
 
+        // Fetch users in batch
+        List<Long> userIds = logs.stream()
+                .map(CompanyAuditLog::getUserId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, User> userMap = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
         return logs.stream()
-                .map(this::mapToDto)
+                .map(log -> mapToDto(log, userMap))
                 .collect(Collectors.toList());
     }
 
-    private AuditLogEntryDto mapToDto(CompanyAuditLog log) {
-        User user = userRepository.findById(log.getUserId()).orElse(null);
+    private AuditLogEntryDto mapToDto(CompanyAuditLog log, Map<Long, User> userMap) {
+        User user = userMap.get(log.getUserId());
 
         return AuditLogEntryDto.builder()
                 .id(log.getId())

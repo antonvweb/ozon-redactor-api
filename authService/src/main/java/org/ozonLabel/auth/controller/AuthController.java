@@ -9,19 +9,16 @@ import org.ozonLabel.auth.config.JwtService;
 import org.ozonLabel.auth.dto.CreateAccountDto;
 import org.ozonLabel.auth.dto.LoginRequestDto;
 import org.ozonLabel.auth.dto.RequestCodeDto;
+import org.ozonLabel.auth.exception.*;
 import org.ozonLabel.auth.model.User;
-import org.ozonLabel.auth.repository.UserRepository;
 import org.ozonLabel.auth.service.AuthService;
 import org.ozonLabel.common.dto.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.BindingResult;
-import org.springframework.validation.ObjectError;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -29,123 +26,141 @@ import java.util.stream.Collectors;
 @Slf4j
 @CrossOrigin(origins = "*")
 public class AuthController {
-    
+
     private final AuthService authService;
-    private final JwtService jwtService;
-    private final UserRepository userRepository;
 
     @PostMapping("/request-code")
-    public ResponseEntity<ApiResponse> requestCode(@Valid @RequestBody RequestCodeDto dto,
-                                                   BindingResult bindingResult) {
-        if (bindingResult.hasErrors()) {
-            String errors = bindingResult.getAllErrors().stream()
-                .map(error -> error.getDefaultMessage())
-                .collect(Collectors.joining(", "));
-            return ResponseEntity.badRequest()
-                .body(ApiResponse.error(errors));
-        }
-        
+    public ResponseEntity<ApiResponse> requestCode(@Valid @RequestBody RequestCodeDto dto) {
         try {
             authService.requestVerificationCode(dto);
             return ResponseEntity.ok(
-                ApiResponse.success("Код подтверждения отправлен на email")
+                    ApiResponse.success("Verification code sent to email")
             );
-        } catch (IllegalArgumentException e) {
-            log.error("Validation error: {}", e.getMessage());
+        } catch (UserAlreadyExistsException e) {
+            log.warn("Registration attempt with existing email");
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error(e.getMessage()));
+        } catch (RateLimitExceededException e) {
+            log.warn("Rate limit exceeded for code request");
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(ApiResponse.error(e.getMessage()));
+        } catch (InvalidVerificationCodeException e) {
             return ResponseEntity.badRequest()
-                .body(ApiResponse.error(e.getMessage()));
+                    .body(ApiResponse.error(e.getMessage()));
+        } catch (EmailSendingException e) {
+            log.error("Failed to send email", e);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(ApiResponse.error("Failed to send email. Please try again later."));
         } catch (Exception e) {
-            log.error("Error requesting verification code", e);
+            log.error("Unexpected error requesting verification code", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Произошла ошибка при отправке кода"));
+                    .body(ApiResponse.error("An unexpected error occurred"));
         }
     }
-    
+
     @PostMapping("/create-account")
-    public ResponseEntity<ApiResponse> createAccount(@Valid @RequestBody CreateAccountDto dto,
-                                                      BindingResult bindingResult) {
-        if (bindingResult.hasErrors()) {
-            String errors = bindingResult.getAllErrors().stream()
-                .map(error -> error.getDefaultMessage())
-                .collect(Collectors.joining(", "));
-            return ResponseEntity.badRequest()
-                .body(ApiResponse.error(errors));
-        }
-        
+    public ResponseEntity<ApiResponse> createAccount(@Valid @RequestBody CreateAccountDto dto) {
         try {
             User user = authService.createAccount(dto);
             return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Аккаунт успешно создан", user.getId()));
-        } catch (IllegalArgumentException e) {
-            log.error("Validation error: {}", e.getMessage());
+                    .body(ApiResponse.success("Account created successfully", user.getId()));
+        } catch (InvalidVerificationCodeException e) {
+            log.warn("Invalid verification code provided");
             return ResponseEntity.badRequest()
-                .body(ApiResponse.error(e.getMessage()));
+                    .body(ApiResponse.error(e.getMessage()));
+        } catch (UserAlreadyExistsException e) {
+            log.warn("Account creation attempt with existing email");
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
             log.error("Error creating account", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Произошла ошибка при создании аккаунта"));
+                    .body(ApiResponse.error("Failed to create account"));
         }
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse> login(@Valid @RequestBody LoginRequestDto dto,
-                                             BindingResult bindingResult) {
-        if (bindingResult.hasErrors()) {
-            String errors = bindingResult.getAllErrors().stream()
-                    .map(ObjectError::getDefaultMessage)
-                    .collect(Collectors.joining(", "));
-            return ResponseEntity.badRequest().body(ApiResponse.error(errors));
-        }
-
+    public ResponseEntity<ApiResponse> login(@Valid @RequestBody LoginRequestDto dto) {
         try {
             Map<String, String> tokens = authService.login(dto.getEmail(), dto.getPassword());
-            return ResponseEntity.ok(ApiResponse.success("Успешный вход", tokens));
-        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(ApiResponse.success("Login successful", tokens));
+        } catch (InvalidCredentialsException e) {
+            log.warn("Failed login attempt for email: {}", maskEmail(dto.getEmail()));
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.error(e.getMessage()));
+        } catch (RateLimitExceededException e) {
+            log.warn("Rate limit exceeded for login: {}", maskEmail(dto.getEmail()));
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Unexpected error during login", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("An unexpected error occurred"));
         }
     }
 
     @PostMapping("/refresh-token")
-    public ResponseEntity<ApiResponse> refreshToken(@CookieValue(value = "refreshToken", required = false) String refreshToken,
-                                                    HttpServletRequest request, HttpServletResponse response) {
-        if (refreshToken == null) {
+    public ResponseEntity<ApiResponse> refreshToken(
+            @CookieValue(value = "refreshToken", required = false) String refreshToken,
+            @RequestHeader(value = "X-Refresh-Token", required = false) String headerRefreshToken) {
+
+        // Try cookie first, then header
+        String token = refreshToken != null ? refreshToken : headerRefreshToken;
+
+        if (token == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("Refresh token отсутствует"));
+                    .body(ApiResponse.error("Refresh token missing"));
         }
 
         try {
-            String email = jwtService.extractEmail(refreshToken);
-            User user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
-
-            // Проверка, что токен совпадает с сохранённым и не истёк
-            if (!refreshToken.equals(user.getRefreshToken()) ||
-                    user.getRefreshTokenExpiresAt().isBefore(LocalDateTime.now())) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(ApiResponse.error("Недействительны refresh token"));
-            }
-
-            String newAccessToken = jwtService.generateToken(email);
-            String newRefreshToken = jwtService.generateRefreshToken(email);
-
-            // Обновляем refresh token (ротация — это хорошо для безопасности)
-            user.setRefreshToken(newRefreshToken);
-            user.setRefreshTokenExpiresAt(LocalDateTime.now().plusDays(14));
-            userRepository.save(user);
-
-            return ResponseEntity.ok(ApiResponse.success("Токен обновлён",
-                    Map.of("accessToken", newAccessToken, "refreshToken", newRefreshToken)));
-
-        } catch (Exception e) {
+            Map<String, String> tokens = authService.refreshToken(token);
+            return ResponseEntity.ok(
+                    ApiResponse.success("Token refreshed successfully", tokens)
+            );
+        } catch (InvalidRefreshTokenException e) {
+            log.warn("Invalid refresh token provided");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("Недействительный refresh token"));
+                    .body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error refreshing token", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to refresh token"));
         }
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse> logout(HttpServletResponse response) {
-        // Лучше: найди пользователя по текущему токену и обнули refreshToken в БД
-        return ResponseEntity.ok(ApiResponse.success("Выход выполнен"));
+    public ResponseEntity<ApiResponse> logout(Authentication auth) {
+        if (auth != null && auth.isAuthenticated()) {
+            try {
+                authService.logout(auth.getName());
+                return ResponseEntity.ok(
+                        ApiResponse.success("Logged out successfully")
+                );
+            } catch (Exception e) {
+                log.error("Error during logout", e);
+            }
+        }
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Logged out successfully")
+        );
+    }
+
+    /**
+     * Mask email for logging (privacy)
+     */
+    private String maskEmail(String email) {
+        if (email == null || !email.contains("@")) {
+            return "***";
+        }
+        String[] parts = email.split("@");
+        String localPart = parts[0];
+        String domain = parts[1];
+
+        if (localPart.length() <= 2) {
+            return "**@" + domain;
+        }
+
+        return localPart.substring(0, 2) + "***@" + domain;
     }
 }

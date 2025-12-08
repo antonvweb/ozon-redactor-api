@@ -2,6 +2,8 @@ package org.ozonLabel.user.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.ozonLabel.common.exception.ResourceNotFoundException;
+import org.ozonLabel.common.exception.ValidationException;
 import org.ozonLabel.user.dto.PremiumRequestDto;
 import org.ozonLabel.user.dto.UpdateOzonCredentialsDto;
 import org.ozonLabel.user.dto.UpdateProfileDto;
@@ -9,11 +11,12 @@ import org.ozonLabel.user.dto.UserResponseDto;
 import org.ozonLabel.domain.model.User;
 import org.ozonLabel.domain.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -25,19 +28,21 @@ public class UserService {
     @Value("${app.support.email:a.volkov@print-365.ru}")
     private String supportEmail;
 
+    @Cacheable(value = "userProfiles", key = "#email")
     public UserResponseDto getCurrentUser(String email) {
-        log.info("Запрашиваем данные пользователя по email: {}", email);
+        log.debug("Fetching user data for: {}", email);
 
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Пользователь не найден"));
+                .orElseThrow(() -> new ResourceNotFoundException("User"));
 
         return mapToDto(user);
     }
 
+    @Transactional
+    @CacheEvict(value = {"userProfiles", "userCompanyAccess"}, key = "#currentEmail")
     public UserResponseDto updateProfile(String currentEmail, UpdateProfileDto dto) {
         if (dto.isEmpty()) {
-            throw new IllegalArgumentException("Хотя бы одно поле должно быть заполнено");
+            throw new ValidationException("At least one field must be provided");
         }
 
         User user = getUserByEmail(currentEmail);
@@ -47,43 +52,51 @@ public class UserService {
         if (dto.getPhone() != null) user.setPhone(dto.getPhone());
         if (dto.getEmail() != null) {
             if (userRepository.existsByEmail(dto.getEmail()) && !dto.getEmail().equals(currentEmail)) {
-                throw new IllegalArgumentException("Этот email уже занят");
+                throw new ValidationException("This email is already taken");
             }
             user.setEmail(dto.getEmail());
         }
 
-        return mapToDto(userRepository.save(user));
+        User saved = userRepository.save(user);
+        log.info("User profile updated: {}", currentEmail);
+
+        return mapToDto(saved);
     }
 
+    @Transactional
+    @CacheEvict(value = "userProfiles", key = "#email")
     public UserResponseDto updateOzonCredentials(String email, UpdateOzonCredentialsDto dto) {
         if (dto.isEmpty()) {
-            throw new IllegalArgumentException("Хотя бы одно поле должно быть заполнено");
+            throw new ValidationException("At least one field must be provided");
         }
 
         User user = getUserByEmail(email);
         if (dto.getOzonClientId() != null) user.setOzonClientId(dto.getOzonClientId().trim());
         if (dto.getOzonApiKey() != null) user.setOzonApiKey(dto.getOzonApiKey().trim());
 
-        return mapToDto(userRepository.save(user));
+        User saved = userRepository.save(user);
+        log.info("Ozon credentials updated for user: {}", email);
+
+        return mapToDto(saved);
     }
 
     public void requestPremiumAccess(String requesterEmail, PremiumRequestDto dto) {
         User requester = userRepository.findByEmail(requesterEmail)
-                .orElse(null); // может быть null, если ещё не зареган
+                .orElse(null);
 
-        String subject = "Заявка на индивидуальную подписку — ozonLabel";
+        String subject = "Premium Subscription Request — ozonLabel";
         String text = """
-                Новая заявка на индивидуальную подписку!
+                New premium subscription request!
 
-                Email для связи: %s
-                Пользователь: %s
-                ID в системе: %s
-                Текущая подписка: %s
+                Contact email: %s
+                User: %s
+                System ID: %s
+                Current subscription: %s
 
-                Свяжитесь с ним как можно скорее!
+                Please contact them as soon as possible!
                 """.formatted(
                 dto.getEmail(),
-                requester != null ? requester.getName() + " (" + requester.getEmail() + ")" : "Не зареган",
+                requester != null ? requester.getName() + " (" + requester.getEmail() + ")" : "Not registered",
                 requester != null ? requester.getId() : "—",
                 requester != null ? requester.getSubscription() : "—"
         );
@@ -95,12 +108,12 @@ public class UserService {
         message.setText(text);
 
         mailSender.send(message);
-        log.info("Заявка на премиум отправлена на {} от {}", supportEmail, dto.getEmail());
+        log.info("Premium request sent to {} from {}", supportEmail, dto.getEmail());
     }
 
     private User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+                .orElseThrow(() -> new ResourceNotFoundException("User"));
     }
 
     private UserResponseDto mapToDto(User user) {

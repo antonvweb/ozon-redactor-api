@@ -4,6 +4,7 @@ import org.ozonLabel.domain.model.OzonProduct;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -44,7 +45,23 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
 
     Long countByUserIdAndAssignedToUserIdIsNull(Long userId);
 
-    // Методы для работы с папками
+    // ⭐ NEW: Bulk update for product assignment
+    @Modifying
+    @Query("UPDATE OzonProduct p SET p.assignedToUserId = :assignedUserId " +
+            "WHERE p.id IN :productIds AND p.userId = :companyOwnerId")
+    int bulkAssignProducts(@Param("productIds") List<Long> productIds,
+                           @Param("companyOwnerId") Long companyOwnerId,
+                           @Param("assignedUserId") Long assignedUserId);
+
+    // ⭐ NEW: Bulk move products to folder
+    @Modifying
+    @Query("UPDATE OzonProduct p SET p.folderId = :folderId " +
+            "WHERE p.id IN :productIds AND p.userId = :userId")
+    int bulkMoveProductsToFolder(@Param("productIds") List<Long> productIds,
+                                 @Param("userId") Long userId,
+                                 @Param("folderId") Long folderId);
+
+    // Folder-related methods
     List<OzonProduct> findByUserIdAndFolderId(Long userId, Long folderId);
 
     Page<OzonProduct> findByUserIdAndFolderId(Long userId, Long folderId, Pageable pageable);
@@ -57,7 +74,7 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
 
     Long countByUserIdAndFolderIdIsNull(Long userId);
 
-    // Поиск по размеру
+    // Size-related methods
     List<OzonProduct> findByUserIdAndSize(Long userId, String size);
 
     Page<OzonProduct> findByUserIdAndSize(Long userId, String size, Pageable pageable);

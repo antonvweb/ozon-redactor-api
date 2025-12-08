@@ -1,15 +1,14 @@
 package org.ozonLabel.user.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class AssignProductDto {
+
+    @NotNull(message = "Product ID cannot be null")
     private Long productId;
-    private Long userId; // null = снять назначение
+
+    // userId can be null to unassign
+    private Long userId;
 }

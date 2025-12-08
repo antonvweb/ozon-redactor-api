@@ -42,6 +42,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("UPDATE Notification n SET n.isRead = true, n.readAt = :readAt WHERE n.id IN :ids AND n.userId = :userId")
     int markAsRead(@Param("ids") List<Long> ids, @Param("userId") Long userId, @Param("readAt") LocalDateTime readAt);
 
+    // ⭐ NEW: Отметить ВСЕ уведомления пользователя как прочитанные (bulk update без предварительной выборки)
+    @Modifying
+    @Query("UPDATE Notification n SET n.isRead = true, n.readAt = :readAt WHERE n.userId = :userId AND n.isRead = false")
+    int markAllAsReadForUser(@Param("userId") Long userId, @Param("readAt") LocalDateTime readAt);
+
     // Массово удалить
     @Modifying
     @Query("DELETE FROM Notification n WHERE n.id IN :ids AND n.userId = :userId")
@@ -56,6 +61,12 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Modifying
     @Query("DELETE FROM Notification n WHERE n.expiresAt IS NOT NULL AND n.expiresAt < :now")
     int deleteExpiredNotifications(@Param("now") LocalDateTime now);
+
+    // ⭐ NEW: Удалить истекшие уведомления пакетами (batch deletion для избежания блокировок)
+    @Modifying
+    @Query(value = "DELETE FROM notifications WHERE expires_at IS NOT NULL AND expires_at < :now LIMIT :batchSize",
+            nativeQuery = true)
+    int deleteExpiredNotificationsBatch(@Param("now") LocalDateTime now, @Param("batchSize") int batchSize);
 
     // Получить уведомления с приоритетом
     List<Notification> findByUserIdAndPriorityOrderByCreatedAtDesc(

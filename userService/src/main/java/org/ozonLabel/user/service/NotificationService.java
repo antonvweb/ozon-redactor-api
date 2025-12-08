@@ -2,6 +2,8 @@ package org.ozonLabel.user.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.ozonLabel.common.exception.AccessDeniedException;
+import org.ozonLabel.common.exception.ResourceNotFoundException;
 import org.ozonLabel.domain.model.Notification;
 import org.ozonLabel.domain.model.User;
 import org.ozonLabel.domain.repository.NotificationRepository;
@@ -13,10 +15,8 @@ import org.ozonLabel.user.dto.NotificationStatsDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -31,10 +31,9 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private static final int MAX_UNREAD_FETCH = 100;
+    private static final int CLEANUP_BATCH_SIZE = 1000;
 
-    /**
-     * Создать уведомление
-     */
     @Transactional
     public Notification createNotification(CreateNotificationDto dto) {
         Notification notification = Notification.builder()
@@ -55,15 +54,10 @@ public class NotificationService {
                 .build();
 
         notification = notificationRepository.save(notification);
-
-        log.info("Создано уведомление {} для пользователя {}", notification.getId(), dto.getUserId());
-
+        log.info("Created notification {} for user {}", notification.getId(), dto.getUserId());
         return notification;
     }
 
-    /**
-     * Создать уведомление о приглашении
-     */
     @Transactional
     public void createInvitationNotification(Long recipientId, Long invitationId,
                                              Long senderId, String senderName,
@@ -77,8 +71,8 @@ public class NotificationService {
         CreateNotificationDto dto = CreateNotificationDto.builder()
                 .userId(recipientId)
                 .type(Notification.NotificationType.INVITATION)
-                .title("Приглашение в компани")
-                .message(String.format("%s приглашает вас в компанию \"%s\" с ролью %s",
+                .title("Company Invitation")
+                .message(String.format("%s invites you to join \"%s\" as %s",
                         senderName, companyName, role))
                 .data(data)
                 .priority(Notification.NotificationPriority.HIGH)
@@ -92,9 +86,6 @@ public class NotificationService {
         createNotification(dto);
     }
 
-    /**
-     * Создать уведомление о принятии приглашения
-     */
     @Transactional
     public void createInvitationAcceptedNotification(Long ownerId, String memberName,
                                                      Long memberId, String companyName) {
@@ -106,8 +97,8 @@ public class NotificationService {
         CreateNotificationDto dto = CreateNotificationDto.builder()
                 .userId(ownerId)
                 .type(Notification.NotificationType.INVITATION_ACCEPTED)
-                .title("Приглашение принято")
-                .message(String.format("%s принял приглашение и присоединился к компании \"%s\"",
+                .title("Invitation Accepted")
+                .message(String.format("%s accepted invitation and joined \"%s\"",
                         memberName, companyName))
                 .data(data)
                 .priority(Notification.NotificationPriority.NORMAL)
@@ -119,9 +110,6 @@ public class NotificationService {
         createNotification(dto);
     }
 
-    /**
-     * Создать уведомление об отклонении приглашения
-     */
     @Transactional
     public void createInvitationRejectedNotification(Long ownerId, String memberName,
                                                      String companyName) {
@@ -132,8 +120,8 @@ public class NotificationService {
         CreateNotificationDto dto = CreateNotificationDto.builder()
                 .userId(ownerId)
                 .type(Notification.NotificationType.INVITATION_REJECTED)
-                .title("Приглашение отклонено")
-                .message(String.format("%s отклонил приглашение в компанию \"%s\"",
+                .title("Invitation Rejected")
+                .message(String.format("%s rejected invitation to \"%s\"",
                         memberName, companyName))
                 .data(data)
                 .priority(Notification.NotificationPriority.NORMAL)
@@ -142,9 +130,6 @@ public class NotificationService {
         createNotification(dto);
     }
 
-    /**
-     * Создать системное уведомление
-     */
     @Transactional
     public Notification createSystemNotification(Long userId, String title, String message) {
         CreateNotificationDto dto = CreateNotificationDto.builder()
@@ -159,7 +144,7 @@ public class NotificationService {
     }
 
     /**
-     * Получить все уведомления пользователя
+     * Get user notifications with N+1 problem fixed using JOIN FETCH
      */
     public NotificationListResponseDto getUserNotifications(String userEmail, int page, int size,
                                                             Boolean unreadOnly, String type) {
@@ -180,8 +165,20 @@ public class NotificationService {
                     .findByUserIdOrderByCreatedAtDesc(user.getId(), pageable);
         }
 
+        // Collect all sender IDs
+        List<Long> senderIds = notificationPage.getContent().stream()
+                .map(Notification::getSenderId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Fetch all senders in one query
+        Map<Long, User> senderMap = userRepository.findAllById(senderIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        // Map to DTOs
         List<NotificationResponseDto> notifications = notificationPage.getContent().stream()
-                .map(this::mapToDto)
+                .map(n -> mapToDto(n, senderMap))
                 .collect(Collectors.toList());
 
         Long unreadCount = notificationRepository.countByUserIdAndIsReadFalse(user.getId());
@@ -196,107 +193,87 @@ public class NotificationService {
     }
 
     /**
-     * Получить непрочитанные уведомления
+     * Get unread notifications with pagination limit
      */
     public List<NotificationResponseDto> getUnreadNotifications(String userEmail) {
         User user = getUserByEmail(userEmail);
 
-        List<Notification> notifications = notificationRepository
-                .findByUserIdAndIsReadFalseOrderByCreatedAtDesc(user.getId());
+        Pageable limit = PageRequest.of(0, MAX_UNREAD_FETCH);
+        Page<Notification> notificationPage = notificationRepository
+                .findByUserIdAndIsReadFalseOrderByCreatedAtDesc(user.getId(), limit);
 
-        return notifications.stream()
-                .map(this::mapToDto)
+        // Fetch senders in batch
+        List<Long> senderIds = notificationPage.getContent().stream()
+                .map(Notification::getSenderId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, User> senderMap = userRepository.findAllById(senderIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        return notificationPage.getContent().stream()
+                .map(n -> mapToDto(n, senderMap))
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Отметить уведомление как прочитанное
-     */
     @Transactional
     public void markAsRead(String userEmail, Long notificationId) {
         User user = getUserByEmail(userEmail);
 
         Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Уведомление не найдено"));
+                .orElseThrow(() -> new ResourceNotFoundException("Notification"));
 
         if (!notification.getUserId().equals(user.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Нет доступа к этому уведомлению");
+            throw new AccessDeniedException("Cannot access this notification");
         }
 
         if (!notification.getIsRead()) {
             notification.markAsRead();
             notificationRepository.save(notification);
-            log.info("Уведомление {} отмечено как прочитанное пользователем {}", notificationId, userEmail);
+            log.debug("Notification {} marked as read by user {}", notificationId, userEmail);
         }
     }
 
-    /**
-     * Массово отметить как прочитанные
-     */
     @Transactional
     public int markMultipleAsRead(String userEmail, List<Long> notificationIds) {
         User user = getUserByEmail(userEmail);
         return notificationRepository.markAsRead(notificationIds, user.getId(), LocalDateTime.now());
     }
 
-    /**
-     * Отметить все как прочитанные
-     */
     @Transactional
     public int markAllAsRead(String userEmail) {
         User user = getUserByEmail(userEmail);
-        List<Notification> unreadNotifications = notificationRepository
-                .findByUserIdAndIsReadFalseOrderByCreatedAtDesc(user.getId());
-
-        List<Long> ids = unreadNotifications.stream()
-                .map(Notification::getId)
-                .collect(Collectors.toList());
-
-        if (ids.isEmpty()) {
-            return 0;
-        }
-
-        return notificationRepository.markAsRead(ids, user.getId(), LocalDateTime.now());
+        // Use bulk update directly instead of fetching first
+        return notificationRepository.markAllAsReadForUser(user.getId(), LocalDateTime.now());
     }
 
-    /**
-     * Удалить уведомление
-     */
     @Transactional
     public void deleteNotification(String userEmail, Long notificationId) {
         User user = getUserByEmail(userEmail);
 
         Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Уведомление не найдено"));
+                .orElseThrow(() -> new ResourceNotFoundException("Notification"));
 
         if (!notification.getUserId().equals(user.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Нет доступа к этому уведомлению");
+            throw new AccessDeniedException("Cannot access this notification");
         }
 
         notificationRepository.delete(notification);
-        log.info("Уведомление {} удалено пользователем {}", notificationId, userEmail);
+        log.debug("Notification {} deleted by user {}", notificationId, userEmail);
     }
 
-    /**
-     * Массово удалить уведомления
-     */
     @Transactional
     public int deleteMultiple(String userEmail, List<Long> notificationIds) {
         User user = getUserByEmail(userEmail);
         return notificationRepository.deleteByIds(notificationIds, user.getId());
     }
 
-    /**
-     * Получить количество непрочитанных уведомлений
-     */
     public Long getUnreadCount(String userEmail) {
         User user = getUserByEmail(userEmail);
         return notificationRepository.countByUserIdAndIsReadFalse(user.getId());
     }
 
-    /**
-     * Получить статистику уведомлений
-     */
     public NotificationStatsDto getNotificationStats(String userEmail) {
         User user = getUserByEmail(userEmail);
 
@@ -319,18 +296,31 @@ public class NotificationService {
     }
 
     /**
-     * Удалить истекшие уведомления (для scheduled task)
+     * Cleanup expired notifications in batches
      */
     @Transactional
     public int cleanupExpiredNotifications() {
-        return notificationRepository.deleteExpiredNotifications(LocalDateTime.now());
+        int totalDeleted = 0;
+        int batchDeleted;
+
+        do {
+            batchDeleted = notificationRepository.deleteExpiredNotificationsBatch(
+                    LocalDateTime.now(), CLEANUP_BATCH_SIZE);
+            totalDeleted += batchDeleted;
+
+            if (batchDeleted > 0) {
+                log.info("Deleted {} expired notifications (total: {})", batchDeleted, totalDeleted);
+            }
+        } while (batchDeleted == CLEANUP_BATCH_SIZE);
+
+        return totalDeleted;
     }
 
-    private NotificationResponseDto mapToDto(Notification notification) {
+    private NotificationResponseDto mapToDto(Notification notification, Map<Long, User> senderMap) {
         NotificationResponseDto.SenderInfo senderInfo = null;
 
         if (notification.getSenderId() != null) {
-            User sender = userRepository.findById(notification.getSenderId()).orElse(null);
+            User sender = senderMap.get(notification.getSenderId());
             if (sender != null) {
                 senderInfo = NotificationResponseDto.SenderInfo.builder()
                         .id(sender.getId())
@@ -362,6 +352,6 @@ public class NotificationService {
 
     private User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+                .orElseThrow(() -> new ResourceNotFoundException("User"));
     }
 }
