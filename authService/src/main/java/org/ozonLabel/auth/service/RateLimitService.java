@@ -18,11 +18,11 @@ public class RateLimitService {
     private static final String LOGIN_ATTEMPTS_PREFIX = "login_attempts:";
     private static final String CODE_REQUESTS_PREFIX = "code_requests:";
 
-    private static final int MAX_LOGIN_ATTEMPTS = 5;
-    private static final int MAX_CODE_REQUESTS = 3;
+    private static final int MAX_LOGIN_ATTEMPTS = 15;
+    private static final int MAX_CODE_REQUESTS = 15;
 
-    private static final long LOGIN_WINDOW_MINUTES = 15;
-    private static final long CODE_WINDOW_MINUTES = 60;
+    private static final long LOGIN_WINDOW_MINUTES = 0;
+    private static final long CODE_WINDOW_MINUTES = 0;
 
     /**
      * Check if login attempt is allowed
