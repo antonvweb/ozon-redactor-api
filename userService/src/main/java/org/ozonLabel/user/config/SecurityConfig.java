@@ -55,9 +55,6 @@ public class SecurityConfig {
                 // Добавьте сюда все нужные origins, включая будущий продакшн-домен
         ));
 
-        // Если хотите временно разрешить ВСЕ origins (для разработки) — используйте pattern "*":
-        config.addAllowedOriginPattern("*");  // Это разрешит любой origin, но с credentials!
-
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
