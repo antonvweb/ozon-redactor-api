@@ -33,20 +33,24 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowCredentials(true);
+        config.setAllowCredentials(true);                     // Обязательно для cookies/credentials
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("*"));
+
+        // ВНИМАНИЕ: Используем allowedOriginPatterns, а НЕ allowedOrigins!
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
                 "https://print-365.ru",
                 "http://26.203.217.255:3000"
+                // Добавьте сюда все нужные origins, включая будущий продакшн-домен
         ));
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config); // лучше оставить /** для всех API
+        // Если хотите временно разрешить ВСЕ origins (для разработки) — используйте pattern "*":
+        config.addAllowedOriginPattern("*");  // Это разрешит любой origin, но с credentials!
 
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
         return source;
     }
 }
