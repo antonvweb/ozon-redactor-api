@@ -39,7 +39,7 @@ public class FolderService {
 
         if (folderRepository.findByUserIdAndNameAndParentFolderId(
                 user.getId(), dto.getName(), dto.getParentFolderId()).isPresent()) {
-            throw new InvalidFolderOperationException("Folder with this name already exists");
+            throw new InvalidFolderOperationException("Папка с таким именем уже существует.");
         }
 
         ProductFolder folder = ProductFolder.builder()
@@ -141,7 +141,7 @@ public class FolderService {
                 .allMatch(p -> p.getUserId().equals(user.getId()));
 
         if (!allValid) {
-            throw new FolderAccessDeniedException("Some products don't belong to you");
+            throw new FolderAccessDeniedException("Некоторые товары вам не принадлежат.");
         }
 
         // Use bulk update instead of saveAll
@@ -225,7 +225,7 @@ public class FolderService {
                 .orElseThrow(() -> new FolderNotFoundException("Folder not found"));
 
         if (!folder.getUserId().equals(userId)) {
-            throw new FolderAccessDeniedException("Access denied to this folder");
+            throw new FolderAccessDeniedException("Доступ к этой папке запрещен.");
         }
 
         return folder;
@@ -233,17 +233,17 @@ public class FolderService {
 
     private void validateFolderOwnership(Long userId, Long folderId) {
         if (!folderRepository.existsByUserIdAndId(userId, folderId)) {
-            throw new FolderNotFoundException("Folder not found");
+            throw new FolderNotFoundException("Папка не найдена");
         }
     }
 
     private void validateFolderMove(Long folderId, Long targetParentId) {
         if (folderId.equals(targetParentId)) {
-            throw new InvalidFolderOperationException("Cannot move folder into itself");
+            throw new InvalidFolderOperationException("Не удаётся переместить папку саму в себя.");
         }
 
         if (isSubfolderOf(targetParentId, folderId)) {
-            throw new InvalidFolderOperationException("Cannot move folder into its subfolder");
+            throw new InvalidFolderOperationException("Не удаётся переместить папку в её подпапку.");
         }
     }
 
@@ -286,6 +286,6 @@ public class FolderService {
 
     private User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден"));
     }
 }

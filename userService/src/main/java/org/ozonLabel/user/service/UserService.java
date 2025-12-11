@@ -42,7 +42,7 @@ public class UserService {
     @CacheEvict(value = {"userProfiles", "userCompanyAccess"}, key = "#currentEmail")
     public UserResponseDto updateProfile(String currentEmail, UpdateProfileDto dto) {
         if (dto.isEmpty()) {
-            throw new ValidationException("At least one field must be provided");
+            throw new ValidationException("Необходимо указать как минимум одно поле.");
         }
 
         User user = getUserByEmail(currentEmail);
@@ -52,7 +52,7 @@ public class UserService {
         if (dto.getPhone() != null) user.setPhone(dto.getPhone());
         if (dto.getEmail() != null) {
             if (userRepository.existsByEmail(dto.getEmail()) && !dto.getEmail().equals(currentEmail)) {
-                throw new ValidationException("This email is already taken");
+                throw new ValidationException("Этот адрес электронной почты уже занят.");
             }
             user.setEmail(dto.getEmail());
         }
@@ -67,7 +67,7 @@ public class UserService {
     @CacheEvict(value = "userProfiles", key = "#email")
     public UserResponseDto updateOzonCredentials(String email, UpdateOzonCredentialsDto dto) {
         if (dto.isEmpty()) {
-            throw new ValidationException("At least one field must be provided");
+            throw new ValidationException("Необходимо указать как минимум одно поле.");
         }
 
         User user = getUserByEmail(email);

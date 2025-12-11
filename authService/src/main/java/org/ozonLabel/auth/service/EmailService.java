@@ -44,10 +44,10 @@ public class EmailService {
             log.info("Verification code sent successfully");
         } catch (MailException e) {
             log.error("Failed to send verification email after retries", e);
-            throw new EmailSendingException("Failed to send verification email");
+            throw new EmailSendingException("Не удалось отправить письмо с подтверждением.");
         } catch (Exception e) {
             log.error("Unexpected error sending email", e);
-            throw new EmailSendingException("Failed to send email");
+            throw new EmailSendingException("Не удалось отправить электронное письмо");
         }
     }
 
@@ -71,7 +71,7 @@ public class EmailService {
             log.info("Password reset email sent successfully");
         } catch (MailException e) {
             log.error("Failed to send password reset email after retries", e);
-            throw new EmailSendingException("Failed to send password reset email");
+            throw new EmailSendingException("Не удалось отправить письмо для сброса пароля.");
         }
     }
 

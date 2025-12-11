@@ -24,8 +24,8 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
-                .error("Credentials Missing")
-                .message("Ozon API credentials required. Please add Client-Id and Api-Key in settings.")
+                .error("Отсутствуют учетные данные.")
+                .message("Требуются учетные данные API Ozon. Пожалуйста, добавьте Client-Id и Api-Key в настройки.")
                 .requiresSettings(true)
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
@@ -38,8 +38,8 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.NOT_FOUND.value())
-                .error("Not Found")
-                .message("User not found")
+                .error("Не найдено")
+                .message("Пользователь не найден")
                 .requiresSettings(false)
                 .build();
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
@@ -52,8 +52,8 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.NOT_FOUND.value())
-                .error("Not Found")
-                .message("Folder not found")
+                .error("Не найдено")
+                .message("Папка не найдена")
                 .requiresSettings(false)
                 .build();
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
@@ -66,8 +66,8 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.FORBIDDEN.value())
-                .error("Access Denied")
-                .message("You don't have access to this folder")
+                .error("Доступ запрещен")
+                .message("У вас нет доступа к этой папке.")
                 .requiresSettings(false)
                 .build();
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
@@ -80,7 +80,7 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
-                .error("Invalid Operation")
+                .error("Неверная операция")
                 .message(ex.getMessage())
                 .requiresSettings(false)
                 .build();
@@ -89,13 +89,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(OzonApiException.class)
     public ResponseEntity<ErrorResponse> handleOzonApiException(OzonApiException ex) {
-        log.error("Ozon API error: {}", ex.getMessage(), ex);
+        log.error("Ошибка API Ozon: {}", ex.getMessage(), ex);
 
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(ex.getStatus().value())
-                .error("Ozon API Error")
-                .message("Error communicating with Ozon API. Please try again later.")
+                .error("Ошибка API Ozon")
+                .message("Ошибка связи с API Ozon. Пожалуйста, попробуйте позже.")
                 .requiresSettings(false)
                 .build();
         return ResponseEntity.status(ex.getStatus()).body(error);
@@ -108,8 +108,8 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.PAYLOAD_TOO_LARGE.value())
-                .error("File Too Large")
-                .message("File size exceeds maximum allowed size")
+                .error("Файл слишком большой")
+                .message("Размер файла превышает максимально допустимый размер.")
                 .requiresSettings(false)
                 .build();
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(error);
@@ -122,7 +122,7 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
-                .error("Invalid Request")
+                .error("Неверный запрос")
                 .message(ex.getMessage())
                 .requiresSettings(false)
                 .build();
@@ -136,8 +136,8 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .error("Internal Server Error")
-                .message("An unexpected error occurred. Please try again later.")
+                .error("Внутренняя ошибка сервера")
+                .message("Произошла непредвиденная ошибка. Пожалуйста, попробуйте позже.")
                 .requiresSettings(false)
                 .build();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);

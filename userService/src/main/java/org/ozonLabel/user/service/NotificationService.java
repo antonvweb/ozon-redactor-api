@@ -225,7 +225,7 @@ public class NotificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Notification"));
 
         if (!notification.getUserId().equals(user.getId())) {
-            throw new AccessDeniedException("Cannot access this notification");
+            throw new AccessDeniedException("Невозможно получить доступ к этому уведомлению");
         }
 
         if (!notification.getIsRead()) {
@@ -256,7 +256,7 @@ public class NotificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Notification"));
 
         if (!notification.getUserId().equals(user.getId())) {
-            throw new AccessDeniedException("Cannot access this notification");
+            throw new AccessDeniedException("Невозможно получить доступ к этому уведомлению");
         }
 
         notificationRepository.delete(notification);

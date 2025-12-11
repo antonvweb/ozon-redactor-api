@@ -50,11 +50,11 @@ public class AuthController {
         } catch (EmailSendingException e) {
             log.error("Failed to send email", e);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(ApiResponse.error("Failed to send email. Please try again later."));
+                    .body(ApiResponse.error("Не удалось отправить электронное письмо. Пожалуйста, попробуйте позже."));
         } catch (Exception e) {
             log.error("Unexpected error requesting verification code", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("An unexpected error occurred"));
+                    .body(ApiResponse.error("Произошла непредвиденная ошибка"));
         }
     }
 
@@ -63,7 +63,7 @@ public class AuthController {
         try {
             User user = authService.createAccount(dto);
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.success("Account created successfully", user.getId()));
+                    .body(ApiResponse.success("Аккаунт успешно создан", user.getId()));
         } catch (InvalidVerificationCodeException e) {
             log.warn("Invalid verification code provided");
             return ResponseEntity.badRequest()
@@ -75,7 +75,7 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Error creating account", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to create account"));
+                    .body(ApiResponse.error("Не удалось создать учетную запись"));
         }
     }
 
@@ -83,7 +83,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse> login(@Valid @RequestBody LoginRequestDto dto) {
         try {
             Map<String, String> tokens = authService.login(dto.getEmail(), dto.getPassword());
-            return ResponseEntity.ok(ApiResponse.success("Login successful", tokens));
+            return ResponseEntity.ok(ApiResponse.success("Вход успешен", tokens));
         } catch (InvalidCredentialsException e) {
             log.warn("Failed login attempt for email: {}", maskEmail(dto.getEmail()));
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -95,7 +95,7 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Unexpected error during login", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("An unexpected error occurred"));
+                    .body(ApiResponse.error("Произошла непредвиденная ошибка"));
         }
     }
 
@@ -109,13 +109,13 @@ public class AuthController {
 
         if (token == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("Refresh token missing"));
+                    .body(ApiResponse.error("Отсутствует токен обновления."));
         }
 
         try {
             Map<String, String> tokens = authService.refreshToken(token);
             return ResponseEntity.ok(
-                    ApiResponse.success("Token refreshed successfully", tokens)
+                    ApiResponse.success("Токен успешно обновлен", tokens)
             );
         } catch (InvalidRefreshTokenException e) {
             log.warn("Invalid refresh token provided");
@@ -124,7 +124,7 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Error refreshing token", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to refresh token"));
+                    .body(ApiResponse.error("Не удалось обновить токен."));
         }
     }
 
@@ -134,7 +134,7 @@ public class AuthController {
             try {
                 authService.logout(auth.getName());
                 return ResponseEntity.ok(
-                        ApiResponse.success("Logged out successfully")
+                        ApiResponse.success("Вышел из системы успешно")
                 );
             } catch (Exception e) {
                 log.error("Error during logout", e);
@@ -142,7 +142,7 @@ public class AuthController {
         }
 
         return ResponseEntity.ok(
-                ApiResponse.success("Logged out successfully")
+                ApiResponse.success("Вышел из системы успешно")
         );
     }
 

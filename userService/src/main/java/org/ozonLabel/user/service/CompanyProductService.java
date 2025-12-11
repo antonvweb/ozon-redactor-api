@@ -38,14 +38,14 @@ public class CompanyProductService {
         User admin = getUserByEmail(adminEmail);
 
         if (!companyService.hasMinimumRole(adminEmail, companyOwnerId, CompanyMember.MemberRole.MODERATOR)) {
-            throw new AccessDeniedException("Insufficient permissions");
+            throw new AccessDeniedException("Недостаточные права доступа");
         }
 
         OzonProduct product = productRepository.findById(dto.getProductId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product"));
 
         if (!product.getUserId().equals(companyOwnerId)) {
-            throw new AccessDeniedException("Product does not belong to this company");
+            throw new AccessDeniedException("Данный продукт не принадлежит этой компании.");
         }
 
         if (dto.getUserId() != null) {
@@ -83,7 +83,7 @@ public class CompanyProductService {
         User admin = getUserByEmail(adminEmail);
 
         if (!companyService.hasMinimumRole(adminEmail, companyOwnerId, CompanyMember.MemberRole.MODERATOR)) {
-            throw new AccessDeniedException("Insufficient permissions");
+            throw new AccessDeniedException("Недостаточные права доступа");
         }
 
         if (dto.getUserId() != null) {
@@ -99,7 +99,7 @@ public class CompanyProductService {
                 .toList();
 
         if (validProducts.isEmpty()) {
-            throw new ValidationException("No valid products found");
+            throw new ValidationException("Действительные продукты не найдены");
         }
 
         // Use batch update instead of individual saves
@@ -174,7 +174,7 @@ public class CompanyProductService {
         );
 
         if (!isMember) {
-            throw new ValidationException("User is not a team member");
+            throw new ValidationException("Пользователь не является членом команды.");
         }
     }
 

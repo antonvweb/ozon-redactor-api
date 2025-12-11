@@ -34,7 +34,7 @@ public class CompanyService {
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
 
-    @Value("${app.frontend.url:http://localhost:3000}")
+    @Value("${app.frontend.url:https://dev.print-365.ru}")
     private String frontendUrl;
 
     @Value("${app.invitation.expiration.hours:72}")
@@ -43,13 +43,13 @@ public class CompanyService {
     @Transactional
     public InviteUserResponseDto inviteUser(String ownerEmail, InviteUserRequestDto request) {
         if (request.isEmpty()) {
-            throw new ValidationException("Email or phone must be provided");
+            throw new ValidationException("Необходимо указать адрес электронной почты или номер телефона.");
         }
 
         User owner = getUserByEmail(ownerEmail);
 
         if (request.getEmail() != null && request.getEmail().equals(ownerEmail)) {
-            throw new ValidationException("Cannot invite yourself");
+            throw new ValidationException("Не могу пригласить себя");
         }
 
         if (request.getEmail() != null) {
@@ -189,7 +189,7 @@ public class CompanyService {
                 .orElseThrow(() -> new ResourceNotFoundException("Invitation"));
 
         if (invitation.getStatus() != Invitation.InvitationStatus.PENDING) {
-            throw new InvalidInvitationException("Invitation already processed");
+            throw new InvalidInvitationException("Приглашение уже обработано");
         }
 
         User rejectingUser = getUserByEmail(rejectingUserEmail);
@@ -226,14 +226,14 @@ public class CompanyService {
         User owner = getUserByEmail(ownerEmail);
 
         Invitation invitation = invitationRepository.findById(invitationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Invitation"));
+                .orElseThrow(() -> new ResourceNotFoundException("Приглашение"));
 
         if (!invitation.getCompanyOwnerId().equals(owner.getId())) {
-            throw new AccessDeniedException("Not your invitation");
+            throw new AccessDeniedException("Это не ваше приглашение");
         }
 
         if (invitation.getStatus() != Invitation.InvitationStatus.PENDING) {
-            throw new InvalidInvitationException("Can only cancel pending invitations");
+            throw new InvalidInvitationException("Можно отменить только ожидающие приглашения.");
         }
 
         invitation.setStatus(Invitation.InvitationStatus.CANCELLED);
@@ -254,7 +254,7 @@ public class CompanyService {
         User admin = getUserByEmail(adminEmail);
 
         if (!hasMinimumRole(adminEmail, companyOwnerId, CompanyMember.MemberRole.ADMIN)) {
-            throw new AccessDeniedException("Insufficient permissions");
+            throw new AccessDeniedException("Недостаточные права доступа");
         }
 
         CompanyMember member = companyMemberRepository
@@ -286,12 +286,12 @@ public class CompanyService {
         User admin = getUserByEmail(adminEmail);
 
         if (!hasMinimumRole(adminEmail, companyOwnerId, CompanyMember.MemberRole.ADMIN)) {
-            throw new AccessDeniedException("Insufficient permissions");
+            throw new AccessDeniedException("Недостаточные права доступа");
         }
 
         CompanyMember member = companyMemberRepository
                 .findByCompanyOwnerIdAndMemberUserId(companyOwnerId, memberId)
-                .orElseThrow(() -> new ResourceNotFoundException("Team member"));
+                .orElseThrow(() -> new ResourceNotFoundException("Член команды"));
 
         Map<String, Object> details = new HashMap<>();
         details.put("memberId", memberId);
@@ -356,7 +356,7 @@ public class CompanyService {
 
         CompanyMember membership = companyMemberRepository
                 .findByCompanyOwnerIdAndMemberUserId(companyOwnerId, user.getId())
-                .orElseThrow(() -> new AccessDeniedException("No access to this company"));
+                .orElseThrow(() -> new AccessDeniedException("Нет доступа к этой компании"));
 
         User owner = userRepository.findById(companyOwnerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Company"));
@@ -434,7 +434,7 @@ public class CompanyService {
                 ownerId, phone, Invitation.InvitationStatus.PENDING);
 
         if (exists) {
-            throw new DuplicateResourceException("Active invitation already exists");
+            throw new DuplicateResourceException("Активное приглашение уже существует");
         }
     }
 
@@ -447,20 +447,20 @@ public class CompanyService {
             boolean alreadyMember = companyMemberRepository.existsByCompanyOwnerIdAndMemberUserId(
                     ownerId, targetUser.getId());
             if (alreadyMember) {
-                throw new DuplicateResourceException("User is already a member");
+                throw new DuplicateResourceException("Пользователь уже является участником.");
             }
         }
     }
 
     private void validateInvitationStatus(Invitation invitation) {
         if (invitation.getStatus() != Invitation.InvitationStatus.PENDING) {
-            throw new InvalidInvitationException("Invitation already used or cancelled");
+            throw new InvalidInvitationException("Приглашение уже использовано или отменено");
         }
 
         if (invitation.isExpired()) {
             invitation.setStatus(Invitation.InvitationStatus.EXPIRED);
             invitationRepository.save(invitation);
-            throw new InvalidInvitationException("Invitation expired");
+            throw new InvalidInvitationException("Срок действия приглашения истек.");
         }
     }
 
@@ -471,13 +471,13 @@ public class CompanyService {
                         invitation.getInviteePhone().equals(user.getPhone()));
 
         if (!matches) {
-            throw new InvalidInvitationException("Invitation is for different user");
+            throw new InvalidInvitationException("Приглашение предназначено для другого пользователя.");
         }
     }
 
     private void validateNotAlreadyMember(Long companyOwnerId, Long userId) {
         if (companyMemberRepository.existsByCompanyOwnerIdAndMemberUserId(companyOwnerId, userId)) {
-            throw new DuplicateResourceException("Already a member of this company");
+            throw new DuplicateResourceException("Уже являюсь членом этой компании.");
         }
     }
 

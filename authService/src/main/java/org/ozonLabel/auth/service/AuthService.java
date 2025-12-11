@@ -43,12 +43,12 @@ public class AuthService {
         // Rate limiting check
         if (!rateLimitService.allowCodeRequest(dto.getEmail())) {
             throw new RateLimitExceededException(
-                    "Too many code requests. Please try again later.");
+                    "Слишком много запросов кода. Пожалуйста, попробуйте позже.");
         }
 
         // Validate passwords match
         if (!dto.getPassword().equals(dto.getConfirmPassword())) {
-            throw new InvalidVerificationCodeException("Passwords do not match");
+            throw new InvalidVerificationCodeException("Пароли не совпадают");
         }
 
         // Check if user exists (unified error message to prevent email enumeration)
@@ -73,7 +73,7 @@ public class AuthService {
             throw e;
         } catch (Exception e) {
             log.error("Unexpected error requesting verification code", e);
-            throw new AuthException("Failed to send verification code", HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new AuthException("Не удалось отправить код подтверждения.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -88,7 +88,7 @@ public class AuthService {
 
         if (storedData == null) {
             throw new InvalidVerificationCodeException(
-                    "Verification code expired or not found");
+                    "Код подтверждения истек или не найден");
         }
 
         try {
@@ -100,7 +100,7 @@ public class AuthService {
 
             // Verify code
             if (!storedCode.equals(dto.getCode())) {
-                throw new InvalidVerificationCodeException("Invalid verification code");
+                throw new InvalidVerificationCodeException("Неверный код подтверждения");
             }
 
             // Double-check user doesn't exist (race condition protection)
@@ -137,7 +137,7 @@ public class AuthService {
             throw e;
         } catch (Exception e) {
             log.error("Error creating account", e);
-            throw new AuthException("Failed to create account", HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new AuthException("Не удалось создать учетную запись", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -151,7 +151,7 @@ public class AuthService {
         // Rate limiting check
         if (!rateLimitService.allowLoginAttempt(normalizedEmail)) {
             throw new RateLimitExceededException(
-                    "Too many login attempts. Please try again later.");
+                    "Слишком много попыток входа. Пожалуйста, попробуйте позже.");
         }
 
         User user = userRepository.findByEmail(normalizedEmail)
@@ -161,7 +161,7 @@ public class AuthService {
         if (user.isAccountLocked()) {
             log.warn("Login attempt on locked account: {}", maskEmail(normalizedEmail));
             throw new RateLimitExceededException(
-                    "Account is temporarily locked. Please try again later.");
+                    "Учетная запись временно заблокирована. Пожалуйста, попробуйте позже.");
         }
 
         // Verify password

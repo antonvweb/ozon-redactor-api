@@ -4,6 +4,6 @@ import org.springframework.http.HttpStatus;
 
 public class InvalidRefreshTokenException extends AuthException {
     public InvalidRefreshTokenException() {
-        super("Invalid or expired refresh token", HttpStatus.UNAUTHORIZED);
+        super("Недействительный или просроченный токен обновления", HttpStatus.UNAUTHORIZED);
     }
 }
