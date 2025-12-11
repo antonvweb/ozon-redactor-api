@@ -27,11 +27,12 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                .cors(Customizer.withDefaults())  // ← ЭТУ СТРОКУ ВЫ ЗАБЫЛИ!
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/user").authenticated()
-                        .requestMatchers("/api/company").authenticated()
-                        .requestMatchers("/api/notifications").authenticated()
+                        .requestMatchers("/api/user/**").authenticated()  // лучше с /**, на всякий случай
+                        .requestMatchers("/api/company/**").authenticated()
+                        .requestMatchers("/api/notifications/**").authenticated()
                         .anyRequest().permitAll()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
