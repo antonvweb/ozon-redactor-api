@@ -25,7 +25,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final JavaMailSender mailSender;
 
-    @Value("${app.support.email:a.volkov@print-365.ru}")
+    @Value("${app.support.email:zhelonkin.zakhar@yandex.ru}")
     private String supportEmail;
 
     @Cacheable(value = "userProfiles", key = "#email")
