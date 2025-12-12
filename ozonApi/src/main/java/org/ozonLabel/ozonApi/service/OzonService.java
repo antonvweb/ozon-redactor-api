@@ -251,7 +251,10 @@ public class OzonService {
     }
 
     public ProductFrontendResponse toFrontendResponse(OzonProduct product) {
-        String image = parseJson(product.getPrimary_image(), String.class);
+        // Получаем первую картинку из массива images
+        List<String> images = parseJson(product.getImages(), new TypeReference<List<String>>() {});
+        String image = (images != null && !images.isEmpty()) ? images.get(0) : null;
+
         String priceStr = product.getPrice() != null ? product.getPrice().toString() : "0";
         Integer stock = calculateStock(product.getStocks());
         String color = product.getSize();  // Or parse from color_image if needed
@@ -259,11 +262,23 @@ public class OzonService {
         String ozonArticle = product.getSku() != null ? product.getSku().toString() : product.getProductId().toString();
         String sellerArticle = product.getOfferId();
         List<String> statuses = parseJson(product.getStatuses(), new TypeReference<List<String>>() {});
-        String colorIndex = parseJson(product.getColor_image(), String.class);
+
+        // Получаем color_index из price_indexes
+        String colorIndex = null;
+        Map<String, Object> priceIndexes = parseJson(product.getPrice_indexes(), new TypeReference<Map<String, Object>>() {});
+        if (priceIndexes != null && priceIndexes.containsKey("color_index")) {
+            colorIndex = (String) priceIndexes.get("color_index");
+        }
+
         Integer modelCount = 0;
         Map<String, Object> modelInfo = parseJson(product.getModel_info(), new TypeReference<Map<String, Object>>() {});
         if (modelInfo != null && modelInfo.containsKey("count")) {
-            modelCount = (Integer) modelInfo.get("count");
+            Object countObj = modelInfo.get("count");
+            if (countObj instanceof Integer) {
+                modelCount = (Integer) countObj;
+            } else if (countObj instanceof Number) {
+                modelCount = ((Number) countObj).intValue();
+            }
         }
 
         return ProductFrontendResponse.builder()
@@ -299,7 +314,8 @@ public class OzonService {
         String colorIndex = null;
         if (productInfo.getPriceIndexes() != null &&
                 productInfo.getPriceIndexes().containsKey("color_index")) {
-            colorIndex = (String) productInfo.getPriceIndexes().get("color_index");
+            Object colorIndexObj = productInfo.getPriceIndexes().get("color_index");
+            colorIndex = colorIndexObj != null ? colorIndexObj.toString() : null;
         }
 
         return ProductFrontendResponse.builder()
