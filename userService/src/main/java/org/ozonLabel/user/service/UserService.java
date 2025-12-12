@@ -125,6 +125,7 @@ public class UserService {
         dto.setInn(user.getInn());
         dto.setPhone(user.getPhone());
         dto.setOzonClientId(user.getOzonClientId());
+        dto.setOzonApiKey(user.getOzonApiKey()); // Добавлено
         dto.setSubscription(user.getSubscription());
         return dto;
     }
