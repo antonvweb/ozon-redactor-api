@@ -141,7 +141,7 @@ public class FolderService {
                 .allMatch(p -> p.getUserId().equals(user.getId()));
 
         if (!allValid) {
-            throw new FolderAccessDeniedException("Некоторые товары вам не принадлежат.");
+            throw new FolderAccessDeniedException("Некоторы товары вам не принадлежат.");
         }
 
         // Use bulk update instead of saveAll

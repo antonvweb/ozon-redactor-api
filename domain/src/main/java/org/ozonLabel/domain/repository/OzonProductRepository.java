@@ -16,6 +16,7 @@ import java.util.Optional;
 public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> {
     boolean existsByUserIdAndProductId(Long userId, Long productId);
 
+
     Optional<OzonProduct> findByUserIdAndProductId(Long userId, Long productId);
     List<OzonProduct> findByUserId(Long userId);
 
@@ -54,9 +55,10 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
                            @Param("assignedUserId") Long assignedUserId);
 
     // ⭐ NEW: Bulk move products to folder
+    // Измените в OzonProductRepository.java:
     @Modifying
     @Query("UPDATE OzonProduct p SET p.folderId = :folderId " +
-            "WHERE p.id IN :productIds AND p.userId = :userId")
+            "WHERE p.productId IN :productIds AND p.userId = :userId") // ⬅️ измените p.id на p.productId
     int bulkMoveProductsToFolder(@Param("productIds") List<Long> productIds,
                                  @Param("userId") Long userId,
                                  @Param("folderId") Long folderId);
