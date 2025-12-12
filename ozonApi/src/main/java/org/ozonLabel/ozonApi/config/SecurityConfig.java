@@ -1,3 +1,5 @@
+// ozon-service/src/main/java/org/ozonLabel/ozonApi/config/SecurityConfig.java
+
 package org.ozonLabel.ozonApi.config;
 
 import lombok.RequiredArgsConstructor;
@@ -25,11 +27,12 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // ← используем наш источник
+                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // ← ВАЖНО!
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/folders/**").authenticated()  // добавил /**
-                        .requestMatchers("/api/ozon/**").authenticated()      // добавил /**
+                        .requestMatchers("/api/v1/ozon/**").authenticated()
+                        .requestMatchers("/api/folders/**").authenticated()
+                        .requestMatchers("/api/ozon/**").authenticated()
                         .anyRequest().permitAll()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
@@ -39,24 +42,19 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-
-        // Используем allowedOriginPatterns
-        configuration.setAllowedOriginPatterns(List.of(
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
                 "https://print-365.ru",
                 "http://26.203.217.255:3000"
         ));
-
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+        source.registerCorsConfiguration("/**", config);
         return source;
     }
-
-    // УДАЛИТЬ WebMvcConfigurer!
 }
