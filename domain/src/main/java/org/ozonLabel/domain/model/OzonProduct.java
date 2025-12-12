@@ -6,6 +6,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -38,6 +41,7 @@ public class OzonProduct {
     private Boolean isAutoarchived;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String barcodes;
 
     @Column(name = "description_category_id")
@@ -50,6 +54,7 @@ public class OzonProduct {
     private LocalDateTime productCreatedAt;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String images;
 
     @Column(name = "currency_code")
@@ -64,12 +69,15 @@ public class OzonProduct {
     private BigDecimal price;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String sources;
 
-    @Column(name = "model_info", columnDefinition = "jsonb")
-    private String modelInfo;
+    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String model_info;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String commissions;
 
     @Column(name = "is_prepayment_allowed")
@@ -88,9 +96,11 @@ public class OzonProduct {
     private Integer discountedFboStocks;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String stocks;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String errors;
 
     @Column(name = "product_updated_at")
@@ -98,25 +108,31 @@ public class OzonProduct {
 
     private BigDecimal vat;
 
-    @Column(name = "visibility_details", columnDefinition = "jsonb")
-    private String visibilityDetails;
-
-    @Column(name = "price_indexes", columnDefinition = "jsonb")
-    private String priceIndexes;
+    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String visibility_details;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String price_indexes;
+
+    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String images360;
 
     @Column(name = "is_kgt")
     private Boolean isKgt;
 
-    @Column(name = "color_image", columnDefinition = "jsonb")
-    private String colorImage;
-
-    @Column(name = "primary_image", columnDefinition = "jsonb")
-    private String primaryImage;
+    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String color_image;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String primary_image;
+
+    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String statuses;
 
     @Column(name = "is_super")
@@ -126,11 +142,13 @@ public class OzonProduct {
     private Boolean isSeasonal;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String promotions;
 
     private Long sku;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String availabilities;
 
     @Column(name = "assigned_to_user_id")
