@@ -71,11 +71,19 @@ public class UserService {
         }
 
         User user = getUserByEmail(email);
-        if (dto.getOzonClientId() != null) user.setOzonClientId(dto.getOzonClientId().trim());
-        if (dto.getOzonApiKey() != null) user.setOzonApiKey(dto.getOzonApiKey().trim());
+
+        // Разрешаем передать пустую строку — это значит "удалить"
+        if (dto.getOzonClientId() != null) {
+            String trimmed = dto.getOzonClientId().trim();
+            user.setOzonClientId(trimmed.isEmpty() ? null : trimmed);
+        }
+        if (dto.getOzonApiKey() != null) {
+            String trimmed = dto.getOzonApiKey().trim();
+            user.setOzonApiKey(trimmed.isEmpty() ? null : trimmed);
+        }
 
         User saved = userRepository.save(user);
-        log.info("Ozon credentials updated for user: {}", email);
+        log.info("Ozon credentials updated (hidden in response) for user: {}", email);
 
         return mapToDto(saved);
     }
@@ -116,6 +124,8 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User"));
     }
 
+    // В методе mapToDto() заменить полностью:
+
     private UserResponseDto mapToDto(User user) {
         UserResponseDto dto = new UserResponseDto();
         dto.setId(user.getId());
@@ -124,8 +134,11 @@ public class UserService {
         dto.setCompanyName(user.getCompanyName());
         dto.setInn(user.getInn());
         dto.setPhone(user.getPhone());
-        dto.setOzonClientId(user.getOzonClientId());
-        dto.setOzonApiKey(user.getOzonApiKey()); // Добавлено
+
+        // Не отдаём сами ключи — только факт наличия
+        dto.setHasOzonClientId(user.getOzonClientId() != null && !user.getOzonClientId().trim().isEmpty());
+        dto.setHasOzonApiKey(user.getOzonApiKey() != null && !user.getOzonApiKey().trim().isEmpty());
+
         dto.setSubscription(user.getSubscription());
         return dto;
     }
