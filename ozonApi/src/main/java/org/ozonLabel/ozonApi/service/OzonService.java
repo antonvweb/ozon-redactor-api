@@ -270,14 +270,32 @@ public class OzonService {
             colorIndex = (String) priceIndexes.get("color_index");
         }
 
+        // ИСПРАВЛЕНИЕ: Получаем количество из model_info
         Integer modelCount = 0;
-        Map<String, Object> modelInfo = parseJson(product.getModel_info(), new TypeReference<Map<String, Object>>() {});
-        if (modelInfo != null && modelInfo.containsKey("count")) {
-            Object countObj = modelInfo.get("count");
-            if (countObj instanceof Integer) {
-                modelCount = (Integer) countObj;
-            } else if (countObj instanceof Number) {
-                modelCount = ((Number) countObj).intValue();
+        if (product.getModel_info() != null && !product.getModel_info().isEmpty()) {
+            try {
+                // Парсим JSON строку model_info в Map
+                Map<String, Object> modelInfo = objectMapper.readValue(
+                        product.getModel_info(),
+                        new TypeReference<Map<String, Object>>() {}
+                );
+
+                if (modelInfo != null && modelInfo.containsKey("count")) {
+                    Object countObj = modelInfo.get("count");
+                    if (countObj instanceof Integer) {
+                        modelCount = (Integer) countObj;
+                    } else if (countObj instanceof Number) {
+                        modelCount = ((Number) countObj).intValue();
+                    } else if (countObj instanceof String) {
+                        try {
+                            modelCount = Integer.parseInt((String) countObj);
+                        } catch (NumberFormatException e) {
+                            log.warn("Неверный формат count в model_info: {}", countObj);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Ошибка при парсинге model_info JSON: {}", product.getModel_info(), e);
             }
         }
 
@@ -288,7 +306,7 @@ public class OzonService {
                 .price(priceStr)
                 .sku(product.getSku())
                 .offerId(product.getOfferId())
-                .modelCount(modelCount)
+                .modelCount(modelCount)  // Теперь здесь будет правильное количество
                 .statuses(statuses)
                 .colorIndex(colorIndex)
                 .barcode(product.getBarcodes())
@@ -305,10 +323,21 @@ public class OzonService {
                 ? productInfo.getImages().get(0)
                 : null;
 
-        Integer modelCount = null;
-        if (productInfo.getModelInfo() != null && productInfo.getModelInfo().containsKey("count")) {
+        // ИСПРАВЛЕНИЕ: Получаем количество из modelInfo
+        Integer modelCount = 0;
+        if (productInfo.getModelInfo() != null) {
             Object countObj = productInfo.getModelInfo().get("count");
-            modelCount = countObj instanceof Integer ? (Integer) countObj : null;
+            if (countObj instanceof Integer) {
+                modelCount = (Integer) countObj;
+            } else if (countObj instanceof Number) {
+                modelCount = ((Number) countObj).intValue();
+            } else if (countObj instanceof String) {
+                try {
+                    modelCount = Integer.parseInt((String) countObj);
+                } catch (NumberFormatException e) {
+                    log.warn("Неверный формат count в modelInfo: {}", countObj);
+                }
+            }
         }
 
         String colorIndex = null;
@@ -325,7 +354,7 @@ public class OzonService {
                 .price(parseBigDecimal(productInfo.getPrice()))
                 .sku(productInfo.getSku())
                 .offerId(productInfo.getOfferId())
-                .modelCount(modelCount)
+                .modelCount(modelCount)  // Теперь здесь будет правильное количество
                 .statuses((List<String>) productInfo.getStatuses())
                 .colorIndex(colorIndex)
                 .build();
