@@ -219,21 +219,21 @@ public class OzonService {
         product.setIsSeasonal(productInfo.getIsSeasonal());
 
         // JSON поля — сохраняем как есть (ObjectMapper сам сделает toString → JSON)
+        product.setBarcodes(toJson(productInfo.getBarcodes()));
         product.setImages(toJson(productInfo.getImages()));
+        product.setSources(toJson(productInfo.getSources()));
+        product.setModel_info(toJson(productInfo.getModelInfo()));
+        product.setCommissions(toJson(productInfo.getCommissions()));
         product.setStocks(toJson(productInfo.getStocks()));
         product.setErrors(toJson(productInfo.getErrors()));
-        product.setSources(toJson(productInfo.getSources()));
-        product.setPriceIndexes(toJson(productInfo.getPriceIndexes()));
-        product.setVisibilityDetails(toJson(productInfo.getVisibilityDetails()));
-        product.setModelInfo(toJson(productInfo.getModelInfo()));
-        product.setPrimaryImage(toJson(productInfo.getPrimaryImage()));
-        product.setColorImage(toJson(productInfo.getColorImage()));
+        product.setVisibility_details(toJson(productInfo.getVisibilityDetails()));
+        product.setPrice_indexes(toJson(productInfo.getPriceIndexes()));
         product.setImages360(toJson(productInfo.getImages360()));
+        product.setColor_image(toJson(productInfo.getColorImage()));
+        product.setPrimary_image(toJson(productInfo.getPrimaryImage()));
         product.setStatuses(toJson(productInfo.getStatuses()));
         product.setPromotions(toJson(productInfo.getPromotions()));
         product.setAvailabilities(toJson(productInfo.getAvailabilities()));
-        product.setBarcodes(toJson(productInfo.getBarcodes()));
-        product.setCommissions(toJson(productInfo.getCommissions()));
 
         // Размер — попробуем вытащить из названия или артикула
         product.setSize(extractSize(productInfo.getName()));
