@@ -43,9 +43,18 @@ public class ProductCreationService {
             validateFolder(user.getId(), dto.getFolderId());
         }
 
-        // Создаем пустой продукт с размером
+        // Генерируем уникальный product_id для локального товара
+        Long productId = generateLocalProductId();
+
+        // Проверяем уникальность
+        while (productRepository.existsByUserIdAndProductId(user.getId(), productId)) {
+            productId = generateLocalProductId();
+        }
+
+        // Создаем продукт с обязательным product_id
         OzonProduct product = OzonProduct.builder()
                 .userId(user.getId())
+                .productId(productId) // ОБЯЗАТЕЛЬНОЕ ПОЛЕ!
                 .size(dto.getSize().trim())
                 .folderId(dto.getFolderId())
                 .createdAt(LocalDateTime.now())
@@ -54,10 +63,16 @@ public class ProductCreationService {
 
         product = productRepository.save(product);
 
-        log.info("Создан товар по размеру '{}' для пользователя {} в папке {}",
-                dto.getSize(), userEmail, dto.getFolderId());
+        log.info("Создан товар по размеру '{}' (product_id: {}) для пользователя {} в папке {}",
+                dto.getSize(), productId, userEmail, dto.getFolderId());
 
         return product;
+    }
+
+    private Long generateLocalProductId() {
+        // Генерируем уникальный отрицательный ID для локальных товаров
+        // Отрицательные значения помогут отличать от товаров Ozon API
+        return -Math.abs(System.currentTimeMillis() % 1000000000L);
     }
 
     /**
@@ -85,10 +100,16 @@ public class ProductCreationService {
             validateFolder(user.getId(), folderId);
         }
 
-        // Пока просто создаем пустую запись
-        // TODO: В будущем здесь будет обработка Excel файла
+        // Генерируем уникальный product_id
+        Long productId = generateLocalProductId();
+        while (productRepository.existsByUserIdAndProductId(user.getId(), productId)) {
+            productId = generateLocalProductId();
+        }
+
+        // Создаем запись с обязательным product_id
         OzonProduct product = OzonProduct.builder()
                 .userId(user.getId())
+                .productId(productId) // ОБЯЗАТЕЛЬНОЕ ПОЛЕ!
                 .folderId(folderId)
                 .name("Импорт из " + filename)
                 .createdAt(LocalDateTime.now())
@@ -97,10 +118,9 @@ public class ProductCreationService {
 
         product = productRepository.save(product);
 
-        log.info("Создан товар из Excel файла '{}' для пользователя {} в папке {}",
-                filename, userEmail, folderId);
+        log.info("Создан товар из Excel файла '{}' (product_id: {}) для пользователя {} в папке {}",
+                filename, productId, userEmail, folderId);
 
-        // Логируем размер файла для отладки
         try {
             log.debug("Размер загруженного файла: {} байт", file.getSize());
         } catch (Exception e) {

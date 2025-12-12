@@ -14,6 +14,7 @@ import java.util.Optional;
 
 @Repository
 public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> {
+    boolean existsByUserIdAndProductId(Long userId, Long productId);
 
     Optional<OzonProduct> findByUserIdAndProductId(Long userId, Long productId);
     List<OzonProduct> findByUserId(Long userId);
