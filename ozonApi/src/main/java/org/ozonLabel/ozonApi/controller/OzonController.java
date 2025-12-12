@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/ozon")
+@RequestMapping("/api/ozon")
 @RequiredArgsConstructor
 @Slf4j
 public class OzonController {

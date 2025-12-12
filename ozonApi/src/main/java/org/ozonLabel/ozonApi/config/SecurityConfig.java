@@ -30,9 +30,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource())) // ← ВАЖНО!
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/ozon/**").authenticated()
-                        .requestMatchers("/api/folders/**").authenticated()
                         .requestMatchers("/api/ozon/**").authenticated()
+                        .requestMatchers("/api/folders/**").authenticated()
                         .anyRequest().permitAll()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
