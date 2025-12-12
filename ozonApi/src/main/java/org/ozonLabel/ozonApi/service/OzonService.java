@@ -179,59 +179,73 @@ public class OzonService {
     }
 
     @Transactional
+    // В OzonService.java
+
     private OzonProduct saveProduct(Long userId, ProductInfo productInfo, Long folderId) {
-        try {
-            Optional<OzonProduct> existingProduct = ozonProductRepository
-                    .findByUserIdAndProductId(userId, productInfo.getId());
+        // Ozon возвращает product_id как String, но у тебя в БД он Long → парсим
+        Long ozonProductId = productInfo.getId();
 
-            OzonProduct product = existingProduct.orElse(new OzonProduct());
+        // Ищем существующий товар по user_id + product_id (это уникальный ключ!)
+        Optional<OzonProduct> existingOpt = ozonProductRepository
+                .findByUserIdAndProductId(userId, ozonProductId);
 
+        OzonProduct product = existingOpt.orElseGet(OzonProduct::new);
+
+        // Если новый — устанавливаем обязательные поля
+        if (!existingOpt.isPresent()) {
             product.setUserId(userId);
-            product.setProductId(productInfo.getId());
-            product.setFolderId(folderId); // Устанавливаем папку
-            product.setName(productInfo.getName());
-            product.setOfferId(productInfo.getOfferId());
-            product.setIsArchived(productInfo.getIsArchived());
-            product.setIsAutoarchived(productInfo.getIsAutoarchived());
-            product.setBarcodes(toJson(productInfo.getBarcodes()));
-            product.setDescriptionCategoryId(productInfo.getDescriptionCategoryId());
-            product.setTypeId(productInfo.getTypeId());
-            product.setProductCreatedAt(parseDateTime(productInfo.getCreatedAt()));
-            product.setImages(toJson(productInfo.getImages()));
-            product.setCurrencyCode(productInfo.getCurrencyCode());
-            product.setMinPrice(parseBigDecimal(productInfo.getMinPrice()));
-            product.setOldPrice(parseBigDecimal(productInfo.getOldPrice()));
-            product.setPrice(parseBigDecimal(productInfo.getPrice()));
-            product.setSources(toJson(productInfo.getSources()));
-            product.setModelInfo(toJson(productInfo.getModelInfo()));
-            product.setCommissions(toJson(productInfo.getCommissions()));
-            product.setIsPrepaymentAllowed(productInfo.getIsPrepaymentAllowed());
-            product.setVolumeWeight(productInfo.getVolumeWeight() != null ?
-                    BigDecimal.valueOf(productInfo.getVolumeWeight()) : null);
-            product.setHasDiscountedFboItem(productInfo.getHasDiscountedFboItem());
-            product.setIsDiscounted(productInfo.getIsDiscounted());
-            product.setDiscountedFboStocks(productInfo.getDiscountedFboStocks());
-            product.setStocks(toJson(productInfo.getStocks()));
-            product.setErrors(toJson(productInfo.getErrors()));
-            product.setProductUpdatedAt(parseDateTime(productInfo.getUpdatedAt()));
-            product.setVat(parseBigDecimal(productInfo.getVat()));
-            product.setVisibilityDetails(toJson(productInfo.getVisibilityDetails()));
-            product.setPriceIndexes(toJson(productInfo.getPriceIndexes()));
-            product.setImages360(toJson(productInfo.getImages360()));
-            product.setIsKgt(productInfo.getIsKgt());
-            product.setColorImage(toJson(productInfo.getColorImage()));
-            product.setPrimaryImage(toJson(productInfo.getPrimaryImage()));
-            product.setStatuses(toJson(productInfo.getStatuses()));
-            product.setIsSuper(productInfo.getIsSuper());
-            product.setIsSeasonal(productInfo.getIsSeasonal());
-            product.setPromotions(toJson(productInfo.getPromotions()));
-            product.setSku(productInfo.getSku());
-            product.setAvailabilities(toJson(productInfo.getAvailabilities()));
+            product.setProductId(ozonProductId);
+        }
 
+        // Обязательно ставим папку (даже если null — значит "без папки")
+        product.setFolderId(folderId);
+
+        // Основные поля
+        product.setName(productInfo.getName());
+        product.setOfferId(productInfo.getOfferId());
+
+        // Цены
+        product.setPrice(toBigDecimal(productInfo.getPrice()));
+        product.setOldPrice(toBigDecimal(productInfo.getOldPrice()));
+        product.setMinPrice(toBigDecimal(productInfo.getMinPrice()));
+
+        // Остальные поля из API
+        product.setSku(productInfo.getSku() != null ? productInfo.getSku() : null);
+        product.setCurrencyCode(productInfo.getCurrencyCode());
+
+        product.setIsKgt(productInfo.getIsKgt());
+        product.setIsPrepaymentAllowed(productInfo.getIsPrepaymentAllowed());
+        product.setIsSuper(productInfo.getIsSuper());
+        product.setIsSeasonal(productInfo.getIsSeasonal());
+
+        // JSON поля — сохраняем как есть (ObjectMapper сам сделает toString → JSON)
+        product.setImages(toJson(productInfo.getImages()));
+        product.setStocks(toJson(productInfo.getStocks()));
+        product.setErrors(toJson(productInfo.getErrors()));
+        product.setSources(toJson(productInfo.getSources()));
+        product.setPriceIndexes(toJson(productInfo.getPriceIndexes()));
+        product.setVisibilityDetails(toJson(productInfo.getVisibilityDetails()));
+        product.setModelInfo(toJson(productInfo.getModelInfo()));
+        product.setPrimaryImage(toJson(productInfo.getPrimaryImage()));
+        product.setColorImage(toJson(productInfo.getColorImage()));
+        product.setImages360(toJson(productInfo.getImages360()));
+        product.setStatuses(toJson(productInfo.getStatuses()));
+        product.setPromotions(toJson(productInfo.getPromotions()));
+        product.setAvailabilities(toJson(productInfo.getAvailabilities()));
+        product.setBarcodes(toJson(productInfo.getBarcodes()));
+        product.setCommissions(toJson(productInfo.getCommissions()));
+
+        // Размер — попробуем вытащить из названия или артикула
+        product.setSize(extractSize(productInfo.getName()));
+
+        // Время обновления
+        product.setUpdatedAt(LocalDateTime.now());
+
+        try {
             return ozonProductRepository.save(product);
         } catch (Exception e) {
-            log.error("Ошибка при сохранении товара в БД", e);
-            throw new RuntimeException("Ошибка при сохранении товара: " + e.getMessage(), e);
+            log.error("Ошибка при сохранении товара product_id={} для пользователя {}", ozonProductId, userId, e);
+            throw new RuntimeException("Не удалось сохранить товар: " + ozonProductId, e);
         }
     }
 
@@ -265,13 +279,32 @@ public class OzonService {
                 .build();
     }
 
-    private String toJson(Object object) {
+    private BigDecimal toBigDecimal(String value) {
+        if (value == null || value.isBlank()) return null;
         try {
-            return object != null ? objectMapper.writeValueAsString(object) : null;
-        } catch (Exception e) {
-            log.error("Ошибка при преобразовании объекта в JSON", e);
+            return new BigDecimal(value);
+        } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private String toJson(Object obj) {
+        if (obj == null) return null;
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (Exception e) {
+            log.warn("Ошибка сериализации JSON", e);
+            return null;
+        }
+    }
+
+    // Простой способ вытащить размер из названия (настрой под себя)
+    private String extractSize(String name) {
+        if (name == null) return null;
+        // Примеры: "Футболка XL", "Наклейка 100x100", "Этикетка 50мм"
+        var match = java.util.regex.Pattern.compile("(?:\\b|\\D)([XSML]|XX*L|\\d{1,3}[xхX]\\d{1,3}(?:mm|мм|см|cm)?|\\d{1,3}[xхX]\\d{1,3})\\b", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(name);
+        return match.find() ? match.group(1).toUpperCase() : null;
     }
 
     private BigDecimal parseBigDecimal(String value) {
