@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.domain.repository.ProductFolderRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.ozonLabel.ozonApi.dto.*;
 import org.ozonLabel.ozonApi.exception.OzonApiCredentialsMissingException;
 import org.ozonLabel.ozonApi.exception.OzonApiException;
@@ -249,6 +250,41 @@ public class OzonService {
         }
     }
 
+    public ProductFrontendResponse toFrontendResponse(OzonProduct product) {
+        String image = parseJson(product.getPrimary_image(), String.class);
+        String priceStr = product.getPrice() != null ? product.getPrice().toString() : "0";
+        Integer stock = calculateStock(product.getStocks());
+        String color = product.getSize();  // Or parse from color_image if needed
+        List<String> tags = new ArrayList<>();
+        String ozonArticle = product.getSku() != null ? product.getSku().toString() : product.getProductId().toString();
+        String sellerArticle = product.getOfferId();
+        List<String> statuses = parseJson(product.getStatuses(), new TypeReference<List<String>>() {});
+        String colorIndex = parseJson(product.getColor_image(), String.class);
+        Integer modelCount = 0;
+        Map<String, Object> modelInfo = parseJson(product.getModel_info(), new TypeReference<Map<String, Object>>() {});
+        if (modelInfo != null && modelInfo.containsKey("count")) {
+            modelCount = (Integer) modelInfo.get("count");
+        }
+
+        return ProductFrontendResponse.builder()
+                .image(image)
+                .name(product.getName())
+                .id(product.getProductId().toString())
+                .price(priceStr)
+                .sku(product.getSku())
+                .offerId(product.getOfferId())
+                .modelCount(modelCount)
+                .statuses(statuses)
+                .colorIndex(colorIndex)
+                .barcode(product.getBarcodes())
+                .ozonArticle(ozonArticle)
+                .sellerArticle(sellerArticle)
+                .stock(stock)
+                .color(color)
+                .tags(tags)
+                .build();
+    }
+
     private ProductFrontendResponse mapToFrontendResponse(ProductInfo productInfo) {
         String image = (productInfo.getImages() != null && !productInfo.getImages().isEmpty())
                 ? productInfo.getImages().get(0)
@@ -269,12 +305,12 @@ public class OzonService {
         return ProductFrontendResponse.builder()
                 .image(image)
                 .name(productInfo.getName())
-                .id(productInfo.getId())
+                .id(String.valueOf(productInfo.getId()))
                 .price(parseBigDecimal(productInfo.getPrice()))
                 .sku(productInfo.getSku())
                 .offerId(productInfo.getOfferId())
                 .modelCount(modelCount)
-                .statuses(productInfo.getStatuses())
+                .statuses((List<String>) productInfo.getStatuses())
                 .colorIndex(colorIndex)
                 .build();
     }
@@ -298,6 +334,31 @@ public class OzonService {
         }
     }
 
+    // Удали старый метод parseJson и вставь этот вместо него
+    @SuppressWarnings("unchecked")
+    private <T> T parseJson(String json, Object type) {
+        if (json == null || json.isEmpty()) return null;
+        try {
+            if (type instanceof Class<?>) {
+                return (T) objectMapper.readValue(json, (Class<?>) type);
+            } else if (type instanceof TypeReference<?>) {
+                return objectMapper.readValue(json, (TypeReference<T>) type);
+            }
+            return null;
+        } catch (Exception e) {
+            log.warn("JSON parse error: {}", json, e);
+            return null;
+        }
+    }
+
+    private Integer calculateStock(String stocksJson) {
+        Map<String, Integer> stocksMap = parseJson(stocksJson, new TypeReference<Map<String, Integer>>() {});
+        if (stocksMap == null) return 0;
+        int present = stocksMap.getOrDefault("present", 0);
+        int reserved = stocksMap.getOrDefault("reserved", 0);
+        return present - reserved;
+    }
+
     // Простой способ вытащить размер из названия (настрой под себя)
     private String extractSize(String name) {
         if (name == null) return null;
@@ -307,9 +368,9 @@ public class OzonService {
         return match.find() ? match.group(1).toUpperCase() : null;
     }
 
-    private BigDecimal parseBigDecimal(String value) {
+    private String parseBigDecimal(String value) {
         try {
-            return value != null && !value.isEmpty() ? new BigDecimal(value) : null;
+            return value != null && !value.isEmpty() ? String.valueOf(new BigDecimal(value)) : null;
         } catch (Exception e) {
             return null;
         }

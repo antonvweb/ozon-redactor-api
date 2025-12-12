@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ApiResponse;
 import org.ozonLabel.ozonApi.dto.CreateProductBySizeDto;
+import org.ozonLabel.ozonApi.dto.ProductFrontendResponse;
 import org.ozonLabel.ozonApi.dto.SyncProductsRequest;
 import org.ozonLabel.ozonApi.dto.SyncProductsResponse;
 import org.ozonLabel.domain.model.OzonProduct;
@@ -21,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/ozon")
@@ -91,16 +93,14 @@ public class OzonController {
      * Создать товар по размеру
      */
     @PostMapping("/products/by-size")
-    public ResponseEntity<OzonProduct> createProductBySize(
+    public ResponseEntity<ProductFrontendResponse> createProductBySize(
             @RequestBody CreateProductBySizeDto dto,
             Authentication auth) {
-
         String userEmail = auth.getName();
         log.info("Создание товара по размеру '{}' для пользователя {} в папке {}",
                 dto.getSize(), userEmail, dto.getFolderId());
-
         OzonProduct product = productCreationService.createProductBySize(userEmail, dto);
-        return ResponseEntity.ok(product);
+        return ResponseEntity.ok(ozonService.toFrontendResponse(product));
     }
 
     /**
@@ -117,12 +117,14 @@ public class OzonController {
                 file.getOriginalFilename(), userEmail, folderId);
 
         OzonProduct product = productCreationService.createProductFromExcel(userEmail, file, folderId);
+        ProductFrontendResponse frontend = ozonService.toFrontendResponse(product);
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("message", "Файл успешно загружен");
         response.put("productId", product.getId());
         response.put("filename", file.getOriginalFilename());
+        response.put("product", frontend); // добавляем готовый объект для фронта
 
         return ResponseEntity.ok(response);
     }
@@ -136,18 +138,17 @@ public class OzonController {
             @RequestParam Long userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-
         log.info("Получение товаров из папки {} для пользователя {}", folderId, userId);
-
         Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> products = productRepository.findByUserIdAndFolderId(userId, folderId, pageable);
-
+        Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderId(userId, folderId, pageable);
+        List<ProductFrontendResponse> responses = productsPage.getContent().stream()
+                .map(ozonService::toFrontendResponse)
+                .collect(Collectors.toList());
         Map<String, Object> response = new HashMap<>();
-        response.put("products", products.getContent());
-        response.put("currentPage", products.getNumber());
-        response.put("totalPages", products.getTotalPages());
-        response.put("totalElements", products.getTotalElements());
-
+        response.put("products", responses);
+        response.put("currentPage", productsPage.getNumber());
+        response.put("totalPages", productsPage.getTotalPages());
+        response.put("totalElements", productsPage.getTotalElements());
         return ResponseEntity.ok(response);
     }
 
@@ -159,18 +160,17 @@ public class OzonController {
             @RequestParam Long userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-
         log.info("Получение товаров без папки для пользователя {}", userId);
-
         Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> products = productRepository.findByUserIdAndFolderIdIsNull(userId, pageable);
-
+        Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderIdIsNull(userId, pageable);
+        List<ProductFrontendResponse> responses = productsPage.getContent().stream()
+                .map(ozonService::toFrontendResponse)
+                .collect(Collectors.toList());
         Map<String, Object> response = new HashMap<>();
-        response.put("products", products.getContent());
-        response.put("currentPage", products.getNumber());
-        response.put("totalPages", products.getTotalPages());
-        response.put("totalElements", products.getTotalElements());
-
+        response.put("products", responses);
+        response.put("currentPage", productsPage.getNumber());
+        response.put("totalPages", productsPage.getTotalPages());
+        response.put("totalElements", productsPage.getTotalElements());
         return ResponseEntity.ok(response);
     }
 
@@ -178,24 +178,27 @@ public class OzonController {
      * Получить все товары пользователя
      */
     @GetMapping("/products")
-    public ResponseEntity<List<OzonProduct>> getAllProducts(@RequestParam Long userId) {
+    public ResponseEntity<List<ProductFrontendResponse>> getAllProducts(@RequestParam Long userId) {
         log.info("Получение всех товаров для пользователя {}", userId);
-
         List<OzonProduct> products = productRepository.findByUserId(userId);
-        return ResponseEntity.ok(products);
+        List<ProductFrontendResponse> responses = products.stream()
+                .map(ozonService::toFrontendResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(responses);
     }
 
     /**
      * Получить товары по размеру
      */
     @GetMapping("/products/by-size")
-    public ResponseEntity<List<OzonProduct>> getProductsBySize(
+    public ResponseEntity<List<ProductFrontendResponse>> getProductsBySize(
             @RequestParam Long userId,
             @RequestParam String size) {
-
         log.info("Поиск товаров по размеру '{}' для пользователя {}", size, userId);
-
         List<OzonProduct> products = productRepository.findByUserIdAndSize(userId, size);
-        return ResponseEntity.ok(products);
+        List<ProductFrontendResponse> responses = products.stream()
+                .map(ozonService::toFrontendResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(responses);
     }
 }

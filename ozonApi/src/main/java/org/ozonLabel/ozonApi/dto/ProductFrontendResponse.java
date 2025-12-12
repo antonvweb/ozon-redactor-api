@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -16,14 +18,20 @@ import java.util.Map;
 public class ProductFrontendResponse {
     private String image;
     private String name;
-    private Long id;
-    private BigDecimal price;
+    private String id;  // Changed to String for frontend consistency
+    private String price;  // Changed to String
     private Long sku;
-    @JsonProperty("offer_id")
     private String offerId;
-    @JsonProperty("model_count")
     private Integer modelCount;
-    private Map<String, Object> statuses;
-    @JsonProperty("color_index")
+    private List<String> statuses;  // Changed to List<String> assuming it's an array
     private String colorIndex;
+
+    // New fields for frontend consistency
+    private String barcode;
+    private String ozonArticle;
+    private String sellerArticle;
+    private Integer stock;
+    private String color;
+    @Builder.Default
+    private List<String> tags = new ArrayList<>();
 }

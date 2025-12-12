@@ -186,4 +186,5 @@ public class OzonProduct {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
 }
