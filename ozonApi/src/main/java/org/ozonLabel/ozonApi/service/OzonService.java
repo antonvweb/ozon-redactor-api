@@ -257,11 +257,25 @@ public class OzonService {
 
         String priceStr = product.getPrice() != null ? product.getPrice().toString() : "0";
         Integer stock = calculateStock(product.getStocks());
-        String color = product.getSize();  // Or parse from color_image if needed
+        String color = product.getSize();
         List<String> tags = new ArrayList<>();
         String ozonArticle = product.getSku() != null ? product.getSku().toString() : product.getProductId().toString();
         String sellerArticle = product.getOfferId();
-        List<String> statuses = parseJson(product.getStatuses(), new TypeReference<List<String>>() {});
+
+        // Статусы парсим как объект
+        List<String> statuses = new ArrayList<>();
+        try {
+            Map<String, Object> statusData = parseJson(product.getStatuses(), new TypeReference<Map<String, Object>>() {});
+            if (statusData != null) {
+                Object statusName = statusData.get("status_name");
+                if (statusName instanceof String) {
+                    statuses.add((String) statusName);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Не удалось распарсить статусы как объект для товара {}", product.getId());
+        }
+
 
         // Получаем color_index из price_indexes
         String colorIndex = null;
@@ -397,11 +411,42 @@ public class OzonService {
     }
 
     private Integer calculateStock(String stocksJson) {
-        Map<String, Integer> stocksMap = parseJson(stocksJson, new TypeReference<Map<String, Integer>>() {});
-        if (stocksMap == null) return 0;
-        int present = stocksMap.getOrDefault("present", 0);
-        int reserved = stocksMap.getOrDefault("reserved", 0);
-        return present - reserved;
+        try {
+            // Парсим JSON как Map<String, Object>
+            Map<String, Object> stocksData = parseJson(stocksJson, new TypeReference<Map<String, Object>>() {});
+            if (stocksData == null) return 0;
+
+            // Проверяем, есть ли поле stocks как массив
+            Object stocksObj = stocksData.get("stocks");
+            if (stocksObj instanceof List) {
+                List<Map<String, Object>> stocksList = (List<Map<String, Object>>) stocksObj;
+                int totalPresent = 0;
+                int totalReserved = 0;
+
+                for (Map<String, Object> stock : stocksList) {
+                    Object present = stock.get("present");
+                    Object reserved = stock.get("reserved");
+
+                    if (present instanceof Number) {
+                        totalPresent += ((Number) present).intValue();
+                    }
+                    if (reserved instanceof Number) {
+                        totalReserved += ((Number) reserved).intValue();
+                    }
+                }
+
+                return Math.max(0, totalPresent - totalReserved);
+            }
+
+            // Старая логика для обратной совместимости
+            Integer present = (Integer) stocksData.getOrDefault("present", 0);
+            Integer reserved = (Integer) stocksData.getOrDefault("reserved", 0);
+            return Math.max(0, present - reserved);
+
+        } catch (Exception e) {
+            log.warn("Ошибка при расчете стока из JSON: {}", stocksJson, e);
+            return 0;
+        }
     }
 
     // Простой способ вытащить размер из названия (настрой под себя)
