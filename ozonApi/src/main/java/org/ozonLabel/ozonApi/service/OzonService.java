@@ -192,7 +192,7 @@ public class OzonService {
         OzonProduct product = existingOpt.orElseGet(OzonProduct::new);
 
         // Если новый — устанавливаем обязательные поля
-        if (!existingOpt.isPresent()) {
+        if (existingOpt.isEmpty()) {
             product.setUserId(userId);
             product.setProductId(ozonProductId);
         }

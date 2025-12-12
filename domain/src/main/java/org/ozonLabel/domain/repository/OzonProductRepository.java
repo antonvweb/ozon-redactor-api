@@ -16,7 +16,6 @@ import java.util.Optional;
 public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> {
 
     Optional<OzonProduct> findByUserIdAndProductId(Long userId, Long productId);
-    Optional<OzonProduct> findByUserIdAndOzonId(Long userId, String ozonId);
     List<OzonProduct> findByUserId(Long userId);
 
     @Query("SELECT p FROM OzonProduct p WHERE p.userId = :userId ORDER BY p.updatedAt DESC")
