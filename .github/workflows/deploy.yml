@@ -74,14 +74,14 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           known_hosts: unnecessary
           config: StrictHostKeyChecking no
-      - name: Install common & domain
+      - name: Install common
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            echo "Установка common и domain..."
-            mvn -U clean install -pl common,domain -am -DskipTests
-            echo "common и domain установлены в локальный репозиторий"
+            echo "Установка common"
+            mvn -U clean install -pl common -am -DskipTests
+            echo "common установлены в локальный репозиторий"
           EOF
 
   # 3. userService — теперь видит notification
