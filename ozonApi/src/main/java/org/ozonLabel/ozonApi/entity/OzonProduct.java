@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.ozonLabel.user.entity.User;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -164,6 +165,17 @@ public class OzonProduct {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "assigned_to_user_id")
+    private Long assignedToUserId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_to_user_id", insertable = false, updatable = false)
+    private User assignedToUser;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    private User owner;
 
     @PrePersist
     protected void onCreate() {
