@@ -107,7 +107,7 @@ jobs:
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/userService
             echo "Сборка userService (notification уже в ~/.m2)"
-            mvn clean package -DskipTests
+            mvn clean install -DskipTests
           EOF
 
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
@@ -166,7 +166,7 @@ jobs:
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.DEPLOY_PROD_PATH }}/ozonApi
-            mvn clean package -DskipTests
+            mvn clean install -DskipTests
             cd ${{ secrets.DEPLOY_PROD_PATH }}
             sudo pm2 delete ozon-api || true
             sudo pm2 start ecosystem.backend.config.js --only ozon-api --update-env
