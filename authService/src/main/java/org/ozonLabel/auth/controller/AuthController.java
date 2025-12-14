@@ -1,18 +1,15 @@
 package org.ozonLabel.auth.controller;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ozonLabel.auth.config.JwtService;
-import org.ozonLabel.auth.dto.CreateAccountDto;
-import org.ozonLabel.auth.dto.LoginRequestDto;
-import org.ozonLabel.auth.dto.RequestCodeDto;
-import org.ozonLabel.auth.exception.*;
+import org.ozonLabel.common.dto.auth.CreateAccountDto;
+import org.ozonLabel.common.dto.auth.LoginRequestDto;
+import org.ozonLabel.common.dto.auth.RequestCodeDto;
 import org.ozonLabel.auth.model.User;
 import org.ozonLabel.auth.service.AuthService;
 import org.ozonLabel.common.dto.ApiResponse;
+import org.ozonLabel.common.exception.auth.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;

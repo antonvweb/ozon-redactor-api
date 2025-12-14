@@ -1,17 +1,16 @@
 package org.ozonLabel.ozonApi.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ozonLabel.common.dto.ApiResponse;
-import org.ozonLabel.ozonApi.dto.CreateProductBySizeDto;
-import org.ozonLabel.ozonApi.dto.ProductFrontendResponse;
-import org.ozonLabel.ozonApi.dto.SyncProductsRequest;
-import org.ozonLabel.ozonApi.dto.SyncProductsResponse;
-import org.ozonLabel.domain.model.OzonProduct;
-import org.ozonLabel.domain.repository.OzonProductRepository;
-import org.ozonLabel.ozonApi.service.OzonService;
-import org.ozonLabel.ozonApi.service.ProductCreationService;
-import org.ozonLabel.user.service.CompanyService;
+import org.ozonLabel.common.dto.ozon.*;
+import org.ozonLabel.common.service.ozon.OzonService;
+import org.ozonLabel.common.service.ozon.ProductCreationService;
+import org.ozonLabel.common.service.user.CompanyService;
+import org.ozonLabel.ozonApi.entity.OzonProduct;
+import org.ozonLabel.ozonApi.repository.OzonProductRepository;
+import org.ozonLabel.ozonApi.service.OzonServiceIml;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +34,7 @@ public class OzonController {
     private final ProductCreationService productCreationService;
     private final OzonProductRepository productRepository;
     private final CompanyService companyService;
+    private final ObjectMapper objectMapper;
 
     /**
      * Синхронизирует товары из Ozon API с возможностью указания папки
@@ -101,7 +101,7 @@ public class OzonController {
         String userEmail = auth.getName();
         log.info("Создание товара по размеру '{}' для пользователя {} в папке {}",
                 dto.getSize(), userEmail, dto.getFolderId());
-        OzonProduct product = productCreationService.createProductBySize(userEmail, dto);
+        ProductInfo product = productCreationService.createProductBySize(userEmail, dto);
         return ResponseEntity.ok(ozonService.toFrontendResponse(product));
     }
 
@@ -118,7 +118,7 @@ public class OzonController {
         log.info("Загрузка Excel файла '{}' для пользователя {} в папку {}",
                 file.getOriginalFilename(), userEmail, folderId);
 
-        OzonProduct product = productCreationService.createProductFromExcel(userEmail, file, folderId);
+        ProductInfo product = productCreationService.createProductFromExcel(userEmail, file, folderId);
         ProductFrontendResponse frontend = ozonService.toFrontendResponse(product);
 
         Map<String, Object> response = new HashMap<>();
@@ -129,6 +129,66 @@ public class OzonController {
         response.put("product", frontend); // добавляем готовый объект для фронта
 
         return ResponseEntity.ok(response);
+    }
+
+    ProductInfo mapToProductInfo(OzonProduct product) {
+        if (product == null) return null;
+        try {
+            return new ProductInfo(
+                    product.getProductId(),
+                    product.getName(),
+                    product.getFolderId(),
+                    product.getSize(),
+                    product.getOfferId(),
+                    product.getIsArchived(),
+                    product.getIsAutoarchived(),
+                    parseJson(product.getBarcodes(), new TypeReference<List<String>>() {}),
+                    product.getDescriptionCategoryId(),
+                    product.getTypeId(),
+                    product.getProductCreatedAt() != null ? product.getProductCreatedAt().toString() : null,
+                    parseJson(product.getImages(), new TypeReference<List<String>>() {}),
+                    product.getCurrencyCode(),
+                    product.getMinPrice() != null ? product.getMinPrice().toString() : null,
+                    product.getOldPrice() != null ? product.getOldPrice().toString() : null,
+                    product.getPrice() != null ? product.getPrice().toString() : null,
+                    parseJson(product.getSources(), new TypeReference<List<Map<String, Object>>>() {}),
+                    parseJson(product.getModel_info(), new TypeReference<Map<String, Object>>() {}),
+                    parseJson(product.getCommissions(), new TypeReference<List<Map<String, Object>>>() {}),
+                    product.getIsPrepaymentAllowed(),
+                    product.getVolumeWeight() != null ? product.getVolumeWeight().doubleValue() : null,
+                    product.getHasDiscountedFboItem(),
+                    product.getIsDiscounted(),
+                    product.getDiscountedFboStocks(),
+                    parseJson(product.getStocks(), new TypeReference<Map<String, Object>>() {}),
+                    parseJson(product.getErrors(), new TypeReference<List<Map<String, Object>>>() {}),
+                    product.getProductUpdatedAt() != null ? product.getProductUpdatedAt().toString() : null,
+                    product.getVat() != null ? product.getVat().toString() : null,
+                    parseJson(product.getVisibility_details(), new TypeReference<Map<String, Object>>() {}),
+                    parseJson(product.getPrice_indexes(), new TypeReference<Map<String, Object>>() {}),
+                    parseJson(product.getImages360(), new TypeReference<List<String>>() {}),
+                    product.getIsKgt(),
+                    parseJson(product.getColor_image(), new TypeReference<List<String>>() {}),
+                    parseJson(product.getPrimary_image(), new TypeReference<List<String>>() {}),
+                    parseJson(product.getStatuses(), new TypeReference<Map<String, Object>>() {}),
+                    product.getIsSuper(),
+                    product.getIsSeasonal(),
+                    parseJson(product.getPromotions(), new TypeReference<List<Map<String, Object>>>() {}),
+                    product.getSku(),
+                    parseJson(product.getAvailabilities(), new TypeReference<List<Map<String, Object>>>() {})
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Ошибка маппинга OzonProduct в ProductInfo", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T parseJson(String json, TypeReference<T> typeReference) {
+        if (json == null || json.isEmpty()) return null;
+        try {
+            return objectMapper.readValue(json, typeReference);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -149,7 +209,7 @@ public class OzonController {
         Pageable pageable = PageRequest.of(page, size);
         Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId, pageable);
         List<ProductFrontendResponse> responses = productsPage.getContent().stream()
-                .map(ozonService::toFrontendResponse)
+                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
         Map<String, Object> response = new HashMap<>();
         response.put("products", responses);
@@ -175,7 +235,7 @@ public class OzonController {
         Pageable pageable = PageRequest.of(page, size);
         Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderIdIsNull(companyOwnerId, pageable);
         List<ProductFrontendResponse> responses = productsPage.getContent().stream()
-                .map(ozonService::toFrontendResponse)
+                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
         Map<String, Object> response = new HashMap<>();
         response.put("products", responses);
@@ -198,7 +258,7 @@ public class OzonController {
         log.info("Получение всех товаров для пользователя {}", companyOwnerId);
         List<OzonProduct> products = productRepository.findByUserId(companyOwnerId);
         List<ProductFrontendResponse> responses = products.stream()
-                .map(ozonService::toFrontendResponse)
+                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(responses);
     }
@@ -217,7 +277,7 @@ public class OzonController {
         log.info("Поиск товаров по размеру '{}' для пользователя {}", size, companyOwnerId);
         List<OzonProduct> products = productRepository.findByUserIdAndSize(companyOwnerId, size);
         List<ProductFrontendResponse> responses = products.stream()
-                .map(ozonService::toFrontendResponse)
+                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(responses);
     }

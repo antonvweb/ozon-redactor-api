@@ -2,7 +2,7 @@ package org.ozonLabel.auth.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ozonLabel.auth.exception.EmailSendingException;
+import org.ozonLabel.common.exception.auth.EmailSendingException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;

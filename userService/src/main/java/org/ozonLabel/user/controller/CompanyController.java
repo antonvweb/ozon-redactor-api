@@ -4,19 +4,16 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ApiResponse;
-import org.ozonLabel.domain.model.CompanyMember;
-import org.ozonLabel.domain.model.OzonProduct;
-import org.ozonLabel.user.dto.*;
-import org.ozonLabel.user.service.AuditLogService;
-import org.ozonLabel.user.service.CompanyService;
-import org.springframework.data.domain.Page;
+import org.ozonLabel.common.dto.user.*;
+import org.ozonLabel.common.model.MemberRole;
+import org.ozonLabel.common.service.user.AuditLogService;
+import org.ozonLabel.common.service.user.CompanyService;
+import org.ozonLabel.user.entity.CompanyMember;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/company")
@@ -199,7 +196,7 @@ public class CompanyController {
         String userEmail = auth.getName();
 
         // Проверяем, что пользователь - ADMIN
-        if (!companyService.hasMinimumRole(userEmail, companyOwnerId, CompanyMember.MemberRole.ADMIN)) {
+        if (!companyService.hasMinimumRole(userEmail, companyOwnerId, MemberRole.ADMIN)) {
             return ResponseEntity.status(403).body(null);
         }
 
@@ -223,7 +220,7 @@ public class CompanyController {
         String userEmail = auth.getName();
 
         // Проверяем права
-        if (!companyService.hasMinimumRole(userEmail, companyOwnerId, CompanyMember.MemberRole.ADMIN)) {
+        if (!companyService.hasMinimumRole(userEmail, companyOwnerId, MemberRole.ADMIN)) {
             return ResponseEntity.status(403).body(null);
         }
 
@@ -242,7 +239,7 @@ public class CompanyController {
         String userEmail = auth.getName();
 
         // Проверяем права
-        if (!companyService.hasMinimumRole(userEmail, companyOwnerId, CompanyMember.MemberRole.ADMIN)) {
+        if (!companyService.hasMinimumRole(userEmail, companyOwnerId, MemberRole.ADMIN)) {
             return ResponseEntity.status(403).body(null);
         }
 
