@@ -33,7 +33,7 @@ module.exports = {
     {
       name: "user-service",
       script: "java",
-      args: ["-jar", "userService.jar"],
+      args: ["-jar", "userService-1.0.0-exec.jar"],
       cwd: "/root/ozonLabeApi/userService/target",
       exec_mode: "fork",
       instances: 1,
