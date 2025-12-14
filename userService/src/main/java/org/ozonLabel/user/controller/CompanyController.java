@@ -26,7 +26,7 @@ public class CompanyController {
     private final AuditLogService auditLogService;
 
     /**
-     * Отправить приглашение пользователю присоединиться к компани
+     * Отправить приглашение пользователю присоединиться к компании
      */
     @PostMapping("/invite")
     public ResponseEntity<InviteUserResponseDto> inviteUser(

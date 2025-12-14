@@ -21,7 +21,7 @@ public class FolderController {
     private final FolderService folderService;
 
     /**
-     * Создать новую папк
+     * Создать новую папку
      */
     @PostMapping
     public ResponseEntity<FolderResponseDto> createFolder(
