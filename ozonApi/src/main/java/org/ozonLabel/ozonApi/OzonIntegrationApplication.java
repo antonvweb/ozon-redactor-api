@@ -10,7 +10,8 @@ import org.springframework.context.annotation.FilterType;
 @ComponentScan(
         basePackages = {
                 "org.ozonLabel.ozonApi",   // пакет твоего сервиса
-                "org.ozonLabel.common"     // весь common
+                "org.ozonLabel.common",
+                "org.ozonLabel.user.service"// весь common
         },
         excludeFilters = @ComponentScan.Filter(
                 type = FilterType.ASSIGNABLE_TYPE,
