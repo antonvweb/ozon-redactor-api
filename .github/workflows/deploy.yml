@@ -31,8 +31,8 @@ jobs:
           [ -z "$raw" ] && raw='${{ steps.detect.outputs.all_changed_files }}'
           clean_json=$(echo "$raw" | sed 's/\\"/"/g')
           echo "$clean_json" > temp.json
-          modules=$(jq -c '[.[] | select(test("^(common|domain|authService|ozonApi|userService|notification)/")) | split("/")[0]] | unique' temp.json)
-          modules=$(echo "$modules" | jq -c 'if index("common") == null then . + ["common"] else . end | if index("domain") == null then . + ["domain"] else . end')
+          modules=$(jq -c '[.[] | select(test("^(common|authService|ozonApi|userService|notification)/")) | split("/")[0]] | unique' temp.json)
+          modules=$(echo "$modules" | jq -c 'if index("common") == null then . + ["common"] else . end')
           echo "modules=$modules" >> $GITHUB_OUTPUT
 
   # 1. Синхронизация всего проекта (включая корневой pom.xml)
