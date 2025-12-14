@@ -31,7 +31,7 @@ public class AuthController {
         try {
             authService.requestVerificationCode(dto);
             return ResponseEntity.ok(
-                    ApiResponse.success("Verification code sent to email")
+                    ApiResponse.success("Verification code sent to emai")
             );
         } catch (UserAlreadyExistsException e) {
             log.warn("Registration attempt with existing email");
