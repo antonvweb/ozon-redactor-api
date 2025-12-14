@@ -120,7 +120,8 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <classifier>exec</classifier>  <!-- ВОТ ЭТО СПАСЁТ ВСЁ -->
+                    <mainClass>org.ozonLabel.user.UserServiceApplication</mainClass>
+                    <finalName>userService</finalName>
                 </configuration>
                 <executions>
                     <execution>
