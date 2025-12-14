@@ -71,8 +71,8 @@ public class NotificationService {
         CreateNotificationDto dto = CreateNotificationDto.builder()
                 .userId(recipientId)
                 .type(Notification.NotificationType.INVITATION)
-                .title("Company Invitation")
-                .message(String.format("%s invites you to join \"%s\" as %s",
+                .title("Приглашение компании")
+                .message(String.format("%s приглашает вас присоединиться \"%s\" as %s",
                         senderName, companyName, role))
                 .data(data)
                 .priority(Notification.NotificationPriority.HIGH)

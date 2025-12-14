@@ -10,6 +10,7 @@ import org.ozonLabel.domain.repository.ProductFolderRepository;
 import org.ozonLabel.domain.repository.UserRepository;
 import org.ozonLabel.ozonApi.dto.*;
 import org.ozonLabel.ozonApi.exception.*;
+import org.ozonLabel.user.service.CompanyService;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -27,23 +28,25 @@ public class FolderService {
     private final ProductFolderRepository folderRepository;
     private final OzonProductRepository productRepository;
     private final UserRepository userRepository;
+    private final CompanyService companyService;
 
     @Transactional
-    @CacheEvict(value = "folderTrees", key = "#userEmail")
-    public FolderResponseDto createFolder(String userEmail, CreateFolderDto dto) {
-        User user = getUserByEmail(userEmail);
+    @CacheEvict(value = "folderTrees", key = "#companyOwnerId")
+    public FolderResponseDto createFolder(String userEmail, Long companyOwnerId, CreateFolderDto dto) {
+        // Проверяем доступ к компании
+        companyService.checkAccess(userEmail, companyOwnerId);
 
         if (dto.getParentFolderId() != null) {
-            validateFolderOwnership(user.getId(), dto.getParentFolderId());
+            validateFolderOwnership(companyOwnerId, dto.getParentFolderId());
         }
 
         if (folderRepository.findByUserIdAndNameAndParentFolderId(
-                user.getId(), dto.getName(), dto.getParentFolderId()).isPresent()) {
+                companyOwnerId, dto.getName(), dto.getParentFolderId()).isPresent()) {
             throw new InvalidFolderOperationException("Папка с таким именем уже существует.");
         }
 
         ProductFolder folder = ProductFolder.builder()
-                .userId(user.getId())
+                .userId(companyOwnerId)
                 .parentFolderId(dto.getParentFolderId())
                 .name(dto.getName())
                 .color(dto.getColor())
@@ -58,10 +61,12 @@ public class FolderService {
     }
 
     @Transactional
-    @CacheEvict(value = "folderTrees", key = "#userEmail")
-    public FolderResponseDto updateFolder(String userEmail, Long folderId, UpdateFolderDto dto) {
-        User user = getUserByEmail(userEmail);
-        ProductFolder folder = getFolderWithAccessCheck(folderId, user.getId());
+    @CacheEvict(value = "folderTrees", key = "#companyOwnerId")
+    public FolderResponseDto updateFolder(String userEmail, Long companyOwnerId, Long folderId, UpdateFolderDto dto) {
+        // Проверяем доступ к компании (минимум MODERATOR для редактирования)
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        ProductFolder folder = getFolderWithAccessCheck(folderId, companyOwnerId);
 
         if (dto.getParentFolderId() != null) {
             validateFolderMove(folderId, dto.getParentFolderId());
@@ -80,74 +85,81 @@ public class FolderService {
     }
 
     @Transactional
-    @CacheEvict(value = "folderTrees", key = "#userEmail")
-    public void deleteFolder(String userEmail, Long folderId, boolean moveProductsToParent) {
-        User user = getUserByEmail(userEmail);
-        ProductFolder folder = getFolderWithAccessCheck(folderId, user.getId());
+    @CacheEvict(value = "folderTrees", key = "#companyOwnerId")
+    public void deleteFolder(String userEmail, Long companyOwnerId, Long folderId, boolean moveProductsToParent) {
+        // Проверяем доступ к компании (минимум MODERATOR для удаления)
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        ProductFolder folder = getFolderWithAccessCheck(folderId, companyOwnerId);
 
         if (moveProductsToParent) {
-            moveItemsToParent(user.getId(), folderId, folder.getParentFolderId());
+            moveItemsToParent(companyOwnerId, folderId, folder.getParentFolderId());
         } else {
-            clearFolderAndSubfolders(user.getId(), folderId);
+            clearFolderAndSubfolders(companyOwnerId, folderId);
         }
 
         folderRepository.deleteById(folderId);
         log.info("Deleted folder {} for user {}", folderId, userEmail);
     }
 
-    @Cacheable(value = "folderTrees", key = "#userEmail")
-    public List<FolderTreeDto> getFolderTree(String userEmail) {
-        User user = getUserByEmail(userEmail);
+    @Cacheable(value = "folderTrees", key = "#companyOwnerId")
+    public List<FolderTreeDto> getFolderTree(String userEmail, Long companyOwnerId) {
+        // Проверяем доступ к компании
+        companyService.checkAccess(userEmail, companyOwnerId);
 
         List<ProductFolder> rootFolders = folderRepository
-                .findByUserIdAndParentFolderIdIsNullOrderByPositionAsc(user.getId());
+                .findByUserIdAndParentFolderIdIsNullOrderByPositionAsc(companyOwnerId);
 
         return rootFolders.stream()
-                .map(folder -> buildFolderTree(folder, user.getId()))
+                .map(folder -> buildFolderTree(folder, companyOwnerId))
                 .collect(Collectors.toList());
     }
 
-    public List<FolderResponseDto> getFolders(String userEmail, Long parentFolderId) {
-        User user = getUserByEmail(userEmail);
+    public List<FolderResponseDto> getFolders(String userEmail, Long companyOwnerId, Long parentFolderId) {
+        // Проверяем доступ к компании
+        companyService.checkAccess(userEmail, companyOwnerId);
 
         List<ProductFolder> folders = parentFolderId == null
-                ? folderRepository.findByUserIdAndParentFolderIdIsNullOrderByPositionAsc(user.getId())
-                : folderRepository.findByUserIdAndParentFolderIdOrderByPositionAsc(user.getId(), parentFolderId);
+                ? folderRepository.findByUserIdAndParentFolderIdIsNullOrderByPositionAsc(companyOwnerId)
+                : folderRepository.findByUserIdAndParentFolderIdOrderByPositionAsc(companyOwnerId, parentFolderId);
 
         return folders.stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
 
-    public FolderResponseDto getFolder(String userEmail, Long folderId) {
-        User user = getUserByEmail(userEmail);
-        ProductFolder folder = getFolderWithAccessCheck(folderId, user.getId());
+    public FolderResponseDto getFolder(String userEmail, Long companyOwnerId, Long folderId) {
+        // Проверяем доступ к компании
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        ProductFolder folder = getFolderWithAccessCheck(folderId, companyOwnerId);
         return mapToDto(folder);
     }
 
     @Transactional
-    public void moveProductsToFolder(String userEmail, MoveProductsToFolderDto dto) {
-        User user = getUserByEmail(userEmail);
+    public void moveProductsToFolder(String userEmail, Long companyOwnerId, MoveProductsToFolderDto dto) {
+        // Проверяем доступ к компании (минимум MODERATOR для перемещения)
+        companyService.checkAccess(userEmail, companyOwnerId);
 
         if (dto.getTargetFolderId() != null) {
-            validateFolderOwnership(user.getId(), dto.getTargetFolderId());
+            validateFolderOwnership(companyOwnerId, dto.getTargetFolderId());
         }
 
         // Fetch all products in one query
         List<OzonProduct> products = productRepository.findAllById(dto.getProductIds());
 
-        // Validate all products belong to user
+        // Validate all products belong to company
         boolean allValid = products.stream()
-                .allMatch(p -> p.getUserId().equals(user.getId()));
+                .allMatch(p -> p.getUserId().equals(companyOwnerId));
 
         if (!allValid) {
-            throw new FolderAccessDeniedException("Некоторы товары вам не принадлежат.");
+            throw new FolderAccessDeniedException("Некоторые товары не принадлежат этой компании.");
         }
 
         // Use bulk update instead of saveAll
         int updated = productRepository.bulkMoveProductsToFolder(
                 dto.getProductIds(),
-                user.getId(),
+                companyOwnerId,
                 dto.getTargetFolderId()
         );
 
@@ -155,9 +167,11 @@ public class FolderService {
                 updated, dto.getTargetFolderId(), userEmail);
     }
 
-    public List<FolderPathDto> getFolderPath(String userEmail, Long folderId) {
-        User user = getUserByEmail(userEmail);
-        ProductFolder folder = getFolderWithAccessCheck(folderId, user.getId());
+    public List<FolderPathDto> getFolderPath(String userEmail, Long companyOwnerId, Long folderId) {
+        // Проверяем доступ к компании
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        ProductFolder folder = getFolderWithAccessCheck(folderId, companyOwnerId);
 
         List<FolderPathDto> path = new ArrayList<>();
         ProductFolder current = folder;
@@ -282,10 +296,5 @@ public class FolderService {
             products.forEach(p -> p.setFolderId(null));
             productRepository.saveAll(products);
         }
-    }
-
-    private User getUserByEmail(String email) {
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден"));
     }
 }

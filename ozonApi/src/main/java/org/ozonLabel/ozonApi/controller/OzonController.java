@@ -11,6 +11,7 @@ import org.ozonLabel.domain.model.OzonProduct;
 import org.ozonLabel.domain.repository.OzonProductRepository;
 import org.ozonLabel.ozonApi.service.OzonService;
 import org.ozonLabel.ozonApi.service.ProductCreationService;
+import org.ozonLabel.user.service.CompanyService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -33,6 +34,7 @@ public class OzonController {
     private final OzonService ozonService;
     private final ProductCreationService productCreationService;
     private final OzonProductRepository productRepository;
+    private final CompanyService companyService;
 
     /**
      * Синхронизирует товары из Ozon API с возможностью указания папки
@@ -135,12 +137,17 @@ public class OzonController {
     @GetMapping("/products/folder/{folderId}")
     public ResponseEntity<Map<String, Object>> getProductsInFolder(
             @PathVariable Long folderId,
-            @RequestParam Long userId,
+            @RequestParam Long companyOwnerId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        log.info("Получение товаров из папки {} для пользователя {}", folderId, userId);
+            @RequestParam(defaultValue = "20") int size,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        // Проверяем доступ к компании
+        companyService.checkAccess(userEmail, companyOwnerId);
+        log.info("Получение товаров из папки {} для пользователя {}", folderId, companyOwnerId);
         Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderId(userId, folderId, pageable);
+        Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId, pageable);
         List<ProductFrontendResponse> responses = productsPage.getContent().stream()
                 .map(ozonService::toFrontendResponse)
                 .collect(Collectors.toList());
@@ -157,12 +164,16 @@ public class OzonController {
      */
     @GetMapping("/products/no-folder")
     public ResponseEntity<Map<String, Object>> getProductsWithoutFolder(
-            @RequestParam Long userId,
+            @RequestParam Long companyOwnerId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        log.info("Получение товаров без папки для пользователя {}", userId);
+            @RequestParam(defaultValue = "20") int size,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+        log.info("Получение товаров без папки для пользователя {}", companyOwnerId);
         Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderIdIsNull(userId, pageable);
+        Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderIdIsNull(companyOwnerId, pageable);
         List<ProductFrontendResponse> responses = productsPage.getContent().stream()
                 .map(ozonService::toFrontendResponse)
                 .collect(Collectors.toList());
@@ -178,9 +189,14 @@ public class OzonController {
      * Получить все товары пользователя
      */
     @GetMapping("/products")
-    public ResponseEntity<List<ProductFrontendResponse>> getAllProducts(@RequestParam Long userId) {
-        log.info("Получение всех товаров для пользователя {}", userId);
-        List<OzonProduct> products = productRepository.findByUserId(userId);
+    public ResponseEntity<List<ProductFrontendResponse>> getAllProducts(
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+        log.info("Получение всех товаров для пользователя {}", companyOwnerId);
+        List<OzonProduct> products = productRepository.findByUserId(companyOwnerId);
         List<ProductFrontendResponse> responses = products.stream()
                 .map(ozonService::toFrontendResponse)
                 .collect(Collectors.toList());
@@ -192,10 +208,14 @@ public class OzonController {
      */
     @GetMapping("/products/by-size")
     public ResponseEntity<List<ProductFrontendResponse>> getProductsBySize(
-            @RequestParam Long userId,
-            @RequestParam String size) {
-        log.info("Поиск товаров по размеру '{}' для пользователя {}", size, userId);
-        List<OzonProduct> products = productRepository.findByUserIdAndSize(userId, size);
+            @RequestParam Long companyOwnerId,
+            @RequestParam String size,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+        log.info("Поиск товаров по размеру '{}' для пользователя {}", size, companyOwnerId);
+        List<OzonProduct> products = productRepository.findByUserIdAndSize(companyOwnerId, size);
         List<ProductFrontendResponse> responses = products.stream()
                 .map(ozonService::toFrontendResponse)
                 .collect(Collectors.toList());

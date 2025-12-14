@@ -8,7 +8,6 @@ import org.ozonLabel.domain.model.CompanyMember;
 import org.ozonLabel.domain.model.OzonProduct;
 import org.ozonLabel.user.dto.*;
 import org.ozonLabel.user.service.AuditLogService;
-import org.ozonLabel.user.service.CompanyProductService;
 import org.ozonLabel.user.service.CompanyService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -28,7 +27,6 @@ public class CompanyController {
 
     private final CompanyService companyService;
     private final AuditLogService auditLogService;
-    private final CompanyProductService productService;
 
     /**
      * Отправить приглашение пользователю присоединиться к компании
@@ -250,94 +248,5 @@ public class CompanyController {
 
         List<AuditLogEntryDto> response = auditLogService.getRecentActions(companyOwnerId);
         return ResponseEntity.ok(response);
-    }
-
-    /**
-     * Назначить товар пользователю
-     */
-    @PostMapping("/{companyOwnerId}/product/assign")
-    public ResponseEntity<ApiResponse> assignProduct(
-            @PathVariable Long companyOwnerId,
-            @RequestBody AssignProductDto dto,
-            Authentication auth) {
-
-        String userEmail = auth.getName();
-        log.info("Назначение товара {} пользователю {} в компании {}",
-                dto.getProductId(), dto.getUserId(), companyOwnerId);
-
-        productService.assignProduct(userEmail, companyOwnerId, dto);
-        return ResponseEntity.ok(ApiResponse.success("Товар успешно назначен"));
-    }
-
-    /**
-     * Массовое назначение товаров
-     */
-    @PostMapping("/{companyOwnerId}/product/bulk-assign")
-    public ResponseEntity<ApiResponse> bulkAssignProducts(
-            @PathVariable Long companyOwnerId,
-            @RequestBody BulkAssignProductsDto dto,
-            Authentication auth) {
-
-        String userEmail = auth.getName();
-        log.info("Массовое назначение {} товаров пользователю {} в компании {}",
-                dto.getProductIds().size(), dto.getUserId(), companyOwnerId);
-
-        productService.bulkAssignProducts(userEmail, companyOwnerId, dto);
-        return ResponseEntity.ok(ApiResponse.success("Товары успешно назначены"));
-    }
-
-    /**
-     * Получить отфильтрованные товары
-     */
-    @GetMapping("/{companyOwnerId}/products")
-    public ResponseEntity<Map<String, Object>> getFilteredProducts(
-            @PathVariable Long companyOwnerId,
-            @RequestParam(required = false) Long assignedToUserId,
-            @RequestParam(required = false) Boolean unassignedOnly,
-            @RequestParam(required = false) Boolean myProductsOnly,
-            @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            Authentication auth) {
-
-        String userEmail = auth.getName();
-
-        Page<OzonProduct> products = productService.getFilteredProducts(
-                userEmail, companyOwnerId, assignedToUserId, unassignedOnly,
-                myProductsOnly, search, page, size);
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("products", products.getContent());
-        response.put("currentPage", products.getNumber());
-        response.put("totalPages", products.getTotalPages());
-        response.put("totalElements", products.getTotalElements());
-
-        return ResponseEntity.ok(response);
-    }
-
-    /**
-     * Получить мои товары
-     */
-    @GetMapping("/{companyOwnerId}/products/my")
-    public ResponseEntity<List<OzonProduct>> getMyProducts(
-            @PathVariable Long companyOwnerId,
-            Authentication auth) {
-
-        String userEmail = auth.getName();
-        List<OzonProduct> products = productService.getMyProducts(userEmail, companyOwnerId);
-        return ResponseEntity.ok(products);
-    }
-
-    /**
-     * Получить неназначенные товары
-     */
-    @GetMapping("/{companyOwnerId}/products/unassigned")
-    public ResponseEntity<List<OzonProduct>> getUnassignedProducts(
-            @PathVariable Long companyOwnerId,
-            Authentication auth) {
-
-        String userEmail = auth.getName();
-        List<OzonProduct> products = productService.getUnassignedProducts(userEmail, companyOwnerId);
-        return ResponseEntity.ok(products);
     }
 }

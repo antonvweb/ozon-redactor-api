@@ -25,13 +25,14 @@ public class FolderController {
      */
     @PostMapping
     public ResponseEntity<FolderResponseDto> createFolder(
+            @RequestParam Long companyOwnerId,
             @RequestBody CreateFolderDto dto,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Создание папки '{}' для пользователя {}", dto.getName(), userEmail);
+        log.info("Создание папки '{}' для компании {} пользователем {}", dto.getName(), companyOwnerId, userEmail);
 
-        FolderResponseDto response = folderService.createFolder(userEmail, dto);
+        FolderResponseDto response = folderService.createFolder(userEmail, companyOwnerId, dto);
         return ResponseEntity.ok(response);
     }
 
@@ -41,13 +42,14 @@ public class FolderController {
     @PutMapping("/{folderId}")
     public ResponseEntity<FolderResponseDto> updateFolder(
             @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
             @RequestBody UpdateFolderDto dto,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Обновление папки {} для пользователя {}", folderId, userEmail);
+        log.info("Обновление папки {} компании {} пользователем {}", folderId, companyOwnerId, userEmail);
 
-        FolderResponseDto response = folderService.updateFolder(userEmail, folderId, dto);
+        FolderResponseDto response = folderService.updateFolder(userEmail, companyOwnerId, folderId, dto);
         return ResponseEntity.ok(response);
     }
 
@@ -57,26 +59,29 @@ public class FolderController {
     @DeleteMapping("/{folderId}")
     public ResponseEntity<ApiResponse> deleteFolder(
             @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
             @RequestParam(defaultValue = "false") boolean moveProductsToParent,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Удаление папки {} для пользователя {} (moveToParent: {})",
-                folderId, userEmail, moveProductsToParent);
+        log.info("Удаление папки {} компании {} пользователем {} (moveToParent: {})",
+                folderId, companyOwnerId, userEmail, moveProductsToParent);
 
-        folderService.deleteFolder(userEmail, folderId, moveProductsToParent);
+        folderService.deleteFolder(userEmail, companyOwnerId, folderId, moveProductsToParent);
         return ResponseEntity.ok(ApiResponse.success("Папка успешно удалена"));
     }
 
     /**
-     * Получить дерево папок
+     * Получить папки определенного уровня
      */
     @GetMapping("/tree")
-    public ResponseEntity<List<FolderTreeDto>> getFolderTree(Authentication auth) {
+    public ResponseEntity<List<FolderTreeDto>> getFolderTree(
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
         String userEmail = auth.getName();
-        log.info("Получение дерева папок для пользователя {}", userEmail);
+        log.info("Получение дерева папок компании {} пользователем {}", companyOwnerId, userEmail);
 
-        List<FolderTreeDto> tree = folderService.getFolderTree(userEmail);
+        List<FolderTreeDto> tree = folderService.getFolderTree(userEmail, companyOwnerId);
         return ResponseEntity.ok(tree);
     }
 
@@ -85,13 +90,14 @@ public class FolderController {
      */
     @GetMapping
     public ResponseEntity<List<FolderResponseDto>> getFolders(
+            @RequestParam Long companyOwnerId,
             @RequestParam(required = false) Long parentFolderId,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Получение папок уровня {} для пользователя {}", parentFolderId, userEmail);
+        log.info("Получение папок уровня {} компании {} пользователем {}", parentFolderId, companyOwnerId, userEmail);
 
-        List<FolderResponseDto> folders = folderService.getFolders(userEmail, parentFolderId);
+        List<FolderResponseDto> folders = folderService.getFolders(userEmail, companyOwnerId, parentFolderId);
         return ResponseEntity.ok(folders);
     }
 
@@ -101,10 +107,11 @@ public class FolderController {
     @GetMapping("/{folderId}")
     public ResponseEntity<FolderResponseDto> getFolder(
             @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        FolderResponseDto response = folderService.getFolder(userEmail, folderId);
+        FolderResponseDto response = folderService.getFolder(userEmail, companyOwnerId, folderId);
         return ResponseEntity.ok(response);
     }
 
@@ -113,14 +120,15 @@ public class FolderController {
      */
     @PostMapping("/move-products")
     public ResponseEntity<ApiResponse> moveProductsToFolder(
+            @RequestParam Long companyOwnerId,
             @RequestBody MoveProductsToFolderDto dto,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Перемещение {} товаров в папку {} для пользователя {}",
-                dto.getProductIds().size(), dto.getTargetFolderId(), userEmail);
+        log.info("Перемещение {} товаров в папку {} компании {} пользователем {}",
+                dto.getProductIds().size(), dto.getTargetFolderId(), companyOwnerId, userEmail);
 
-        folderService.moveProductsToFolder(userEmail, dto);
+        folderService.moveProductsToFolder(userEmail, companyOwnerId, dto);
         return ResponseEntity.ok(ApiResponse.success("Товары успешно перемещены"));
     }
 
@@ -130,10 +138,11 @@ public class FolderController {
     @GetMapping("/{folderId}/path")
     public ResponseEntity<List<FolderPathDto>> getFolderPath(
             @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        List<FolderPathDto> path = folderService.getFolderPath(userEmail, folderId);
+        List<FolderPathDto> path = folderService.getFolderPath(userEmail, companyOwnerId, folderId);
         return ResponseEntity.ok(path);
     }
 }

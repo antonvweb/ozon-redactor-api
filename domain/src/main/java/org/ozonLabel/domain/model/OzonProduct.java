@@ -153,9 +153,6 @@ public class OzonProduct {
     @JdbcTypeCode(SqlTypes.JSON)
     private String availabilities;
 
-    @Column(name = "assigned_to_user_id")
-    private Long assignedToUserId;
-
     @Column(name = "folder_id")
     private Long folderId;
 
