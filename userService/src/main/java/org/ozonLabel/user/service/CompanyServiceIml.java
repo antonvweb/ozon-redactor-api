@@ -416,6 +416,10 @@ public class CompanyServiceIml implements CompanyService {
     public MemberRole checkAccess(String userEmail, Long companyOwnerId) {
         User user = getUserByEmail(userEmail);
 
+        if (user.getId().equals(companyOwnerId)) {
+            return MemberRole.ADMIN;
+        }
+
         return companyMemberRepository.findRoleByCompanyOwnerIdAndMemberUserId(companyOwnerId, user.getId())
                 .orElseThrow(() -> new AccessDeniedException("No access to this company"));
     }
