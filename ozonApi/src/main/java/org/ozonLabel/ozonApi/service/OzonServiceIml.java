@@ -389,6 +389,7 @@ public class OzonServiceIml implements OzonService {
         if (product == null) return null;
         try {
             return new ProductInfo(
+                    product.getUserId(),
                     product.getProductId(),
                     product.getName(),
                     product.getFolderId(),

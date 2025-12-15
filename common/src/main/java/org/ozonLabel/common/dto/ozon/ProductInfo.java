@@ -12,6 +12,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ProductInfo {
+    private Long userId;
     private Long id;
     private String name;
     private Long folderId;       // ✅ добавлено

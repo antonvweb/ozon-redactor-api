@@ -167,6 +167,8 @@ public class UserServiceImpl implements UserService {
         dto.setSubscription((user.getSubscription()));
         dto.setEmailVerified(user.getEmailVerified());
         dto.setPasswordChangedAt(user.getPasswordChangedAt());
+        dto.setOzonClientId(user.getOzonClientId());
+        dto.setOzonApiKey(user.getOzonApiKey());
 
         log.info("User {}: ozonClientId='{}', ozonApiKey='{}'", user.getId(), user.getOzonClientId(), user.getOzonApiKey());
 

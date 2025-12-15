@@ -127,6 +127,7 @@ public class ProductCreationServiceIml implements ProductCreationService {
      */
     private ProductInfo mapToProductInfo(OzonProduct product) {
         ProductInfo info = new ProductInfo();
+        product.setUserId(info.getUserId());
         info.setId(product.getProductId());
         info.setName(product.getName());
         info.setSku(product.getSku());
