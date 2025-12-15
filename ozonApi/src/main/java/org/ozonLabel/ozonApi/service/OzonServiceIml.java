@@ -114,6 +114,7 @@ public class OzonServiceIml implements OzonService {
     }
 
     private void validateUserCredentials(UserResponseDto user) {
+        log.info("OzonClientId='{}', OzonApiKey='{}'", user.getOzonClientId(), user.getOzonApiKey());
         if (user.getOzonClientId() == null || user.getOzonClientId().trim().isEmpty() ||
                 user.getOzonApiKey() == null || user.getOzonApiKey().trim().isEmpty()) {
             throw new OzonApiCredentialsMissingException(
