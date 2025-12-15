@@ -122,7 +122,7 @@ public class CompanyController {
     }
 
     /**
-     * Получить список всех компаний, к которым привязан пользовател
+     * Получить список всех компаний, к которым привязан пользователь
      */
     @GetMapping("/my-companies")
     public ResponseEntity<UserCompaniesResponseDto> getMyCompanies(Authentication auth) {
