@@ -449,19 +449,115 @@ public class OzonServiceIml implements OzonService {
 
     @Override
     public ProductFrontendResponse toFrontendResponse(ProductInfo product) {
-        if (product == null) return null;
+        if (product == null) {
+            return null;
+        }
+
+        // Первая картинка из списка images
         String image = (product.getImages() != null && !product.getImages().isEmpty())
                 ? product.getImages().get(0)
                 : null;
+
+        // Цена как строка
+        String priceStr = product.getPrice() != null ? product.getPrice() : "0";
+
+        // Расчёт остатков (stocks уже Map<String, Object>)
+        Integer stock = calculateStockFromMap(product.getStocks());
+
+        // Цвет — берём из size (как было в старом методе)
+        String color = product.getSize();
+
+        // Артикулы
+        String ozonArticle = product.getSku() != null
+                ? product.getSku().toString()
+                : (product.getId() != null ? product.getId().toString() : "");
+        String sellerArticle = product.getOfferId();
+
+        // Теги — пока пусто, как в старом методе
+        List<String> tags = new ArrayList<>();
+
+        // Статусы — парсим как в старом методе
+        List<String> statuses = new ArrayList<>();
+        if (product.getStatuses() != null) {
+            Object statusName = product.getStatuses().get("status_name");
+            if (statusName instanceof String) {
+                statuses.add((String) statusName);
+            }
+        }
+
+        // colorIndex из price_indexes
+        String colorIndex = null;
+        if (product.getPriceIndexes() != null && product.getPriceIndexes().containsKey("color_index")) {
+            Object colorIdxObj = product.getPriceIndexes().get("color_index");
+            if (colorIdxObj instanceof String) {
+                colorIndex = (String) colorIdxObj;
+            }
+        }
+
+        // modelCount из model_info
+        Integer modelCount = 0;
+        if (product.getModelInfo() != null && product.getModelInfo().containsKey("count")) {
+            Object countObj = product.getModelInfo().get("count");
+            if (countObj instanceof Integer) {
+                modelCount = (Integer) countObj;
+            } else if (countObj instanceof Number) {
+                modelCount = ((Number) countObj).intValue();
+            } else if (countObj instanceof String) {
+                try {
+                    modelCount = Integer.parseInt((String) countObj);
+                } catch (NumberFormatException e) {
+                    log.warn("Неверный формат count в model_info: {}", countObj);
+                }
+            }
+        }
+
         return ProductFrontendResponse.builder()
-                .id(String.valueOf(product.getId()))
+                .image(image)
                 .name(product.getName())
-                .price(product.getPrice())
+                .id(String.valueOf(product.getId()))
+                .price(priceStr)
                 .sku(product.getSku())
                 .offerId(product.getOfferId())
-                .image(image)
-                .statuses(product.getStatuses() != null ? List.copyOf(product.getStatuses().keySet()) : List.of())
+                .modelCount(modelCount)
+                .statuses(statuses)
+                .colorIndex(colorIndex)
+                .barcode(product.getBarcodes() != null ? String.join(",", product.getBarcodes()) : null)  // или List<String>, если фронт поддерживает
+                .ozonArticle(ozonArticle)
+                .sellerArticle(sellerArticle)
+                .stock(stock)
+                .color(color)
+                .tags(tags)
                 .build();
+    }
+
+    private Integer calculateStockFromMap(Map<String, Object> stocksData) {
+        if (stocksData == null) {
+            return 0;
+        }
+
+        try {
+            // Новая логика: суммируем по всем типам стоков
+            int totalPresent = 0;
+            int totalReserved = 0;
+
+            for (Object value : stocksData.values()) {
+                if (value instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> stock = (Map<String, Object>) value;
+                    if (stock.containsKey("present")) {
+                        totalPresent += ((Number) stock.get("present")).intValue();
+                    }
+                    if (stock.containsKey("reserved")) {
+                        totalReserved += ((Number) stock.get("reserved")).intValue();
+                    }
+                }
+            }
+
+            return Math.max(0, totalPresent - totalReserved);
+        } catch (Exception e) {
+            log.warn("Ошибка при расчете стока из Map: {}", stocksData, e);
+            return 0;
+        }
     }
 
     @Override
