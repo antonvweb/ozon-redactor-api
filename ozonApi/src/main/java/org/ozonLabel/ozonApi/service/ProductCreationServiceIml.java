@@ -1,5 +1,6 @@
 package org.ozonLabel.ozonApi.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ozon.CreateProductBySizeDto;
@@ -10,13 +11,17 @@ import org.ozonLabel.common.service.ozon.OzonService;
 import org.ozonLabel.common.service.ozon.ProductCreationService;
 import org.ozonLabel.common.service.user.UserService;
 import org.ozonLabel.ozonApi.entity.OzonProduct;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.lang.runtime.ObjectMethods;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +30,7 @@ public class ProductCreationServiceIml implements ProductCreationService {
     private final OzonService ozonService;
     private final UserService userService;
     private final FolderService folderService;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
@@ -57,6 +63,8 @@ public class ProductCreationServiceIml implements ProductCreationService {
 
 // Сохраняем через OzonService
         ProductInfo savedProductInfo = ozonService.saveProduct(productInfo);
+        log.info("сохраненный ProductInfo '{}', product -  {} productInfo -  {}",
+                dto.getSize(), productId, userEmail);
 
         log.info("Создан товар по размеру '{}' (product_id: {}) для пользователя {} в папке {}",
                 dto.getSize(), productId, userEmail, dto.getFolderId());
@@ -133,6 +141,17 @@ public class ProductCreationServiceIml implements ProductCreationService {
         info.setId(product.getProductId());
         info.setName(product.getName());
         info.setSku(product.getSku());
+        if (product.getTags() != null) {
+            try {
+                List<String> tags = objectMapper.readValue(product.getTags(), new TypeReference<List<String>>() {});
+                info.setTags(tags);
+            } catch (Exception e) {
+                log.warn("Ошибка при парсинге тегов: {}", product.getTags(), e);
+                info.setTags(new ArrayList<>());
+            }
+        } else {
+            info.setTags(new ArrayList<>());
+        }
         info.setOfferId(product.getOfferId());
         info.setIsArchived(product.getIsArchived());
         info.setIsAutoarchived(product.getIsAutoarchived());

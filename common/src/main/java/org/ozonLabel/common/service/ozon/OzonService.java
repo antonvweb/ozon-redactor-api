@@ -57,6 +57,9 @@ public interface OzonService {
     List<ProductInfo> findByUserIdAndSize(Long userId, String size);
     Page<ProductInfo> findByUserIdAndSize(Long userId, String size, Pageable pageable);
 
+    Page<ProductInfo> searchProducts(Long userId, String searchTerm, Pageable pageable);
+    Page<ProductInfo> searchProductsInFolder(Long userId, Long folderId, String searchTerm, Pageable pageable);
+
     ProductInfo saveProduct(ProductInfo productInfo);
 }
 

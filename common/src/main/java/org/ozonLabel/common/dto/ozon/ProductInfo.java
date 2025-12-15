@@ -10,15 +10,16 @@ import java.util.List;
 import java.util.Map;
 
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class ProductInfo {
     private Long userId;
     private Long id;
     private String name;
     private Long folderId;       // ✅ добавлено
     private String size;
+    private List<String> tags;
     @JsonProperty("offer_id")
     private String offerId;
     @JsonProperty("is_archived")

@@ -29,6 +29,10 @@ public class OzonProduct {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String tags;
+
     @Column(name = "product_id", nullable = false)
     private Long productId;
 

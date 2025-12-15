@@ -111,6 +111,18 @@ public class OzonServiceIml implements OzonService {
                 .build();
     }
 
+    @Override
+    public Page<ProductInfo> searchProducts(Long userId, String searchTerm, Pageable pageable) {
+        return ozonProductRepository.searchProducts(userId, searchTerm, pageable)
+                .map(this::mapToProductInfo);
+    }
+
+    @Override
+    public Page<ProductInfo> searchProductsInFolder(Long userId, Long folderId, String searchTerm, Pageable pageable) {
+        return ozonProductRepository.searchProductsInFolder(userId, folderId, searchTerm, pageable)
+                .map(this::mapToProductInfo);
+    }
+
     /**
      * Синхронизация товаров (старый метод без папки)
      */
@@ -261,88 +273,6 @@ public class OzonServiceIml implements OzonService {
         }
     }
 
-    public ProductFrontendResponse toFrontendResponse(OzonProduct product) {
-        // Получаем первую картинку из массива images
-        List<String> images = parseJson(product.getImages(), new TypeReference<List<String>>() {});
-        String image = (images != null && !images.isEmpty()) ? images.get(0) : null;
-
-        String priceStr = product.getPrice() != null ? product.getPrice().toString() : "0";
-        Integer stock = calculateStock(product.getStocks());
-        String color = product.getSize();
-        List<String> tags = new ArrayList<>();
-        String ozonArticle = product.getSku() != null ? product.getSku().toString() : product.getProductId().toString();
-        String sellerArticle = product.getOfferId();
-
-        // Статусы парсим как объект
-        List<String> statuses = new ArrayList<>();
-        try {
-            Map<String, Object> statusData = parseJson(product.getStatuses(), new TypeReference<Map<String, Object>>() {});
-            if (statusData != null) {
-                Object statusName = statusData.get("status_name");
-                if (statusName instanceof String) {
-                    statuses.add((String) statusName);
-                }
-            }
-        } catch (Exception e) {
-            log.debug("Не удалось распарсить статусы как объект для товара {}", product.getId());
-        }
-
-
-        // Получаем color_index из price_indexes
-        String colorIndex = null;
-        Map<String, Object> priceIndexes = parseJson(product.getPrice_indexes(), new TypeReference<Map<String, Object>>() {});
-        if (priceIndexes != null && priceIndexes.containsKey("color_index")) {
-            colorIndex = (String) priceIndexes.get("color_index");
-        }
-
-        // ИСПРАВЛЕНИЕ: Получаем количество из model_info
-        Integer modelCount = 0;
-        if (product.getModel_info() != null && !product.getModel_info().isEmpty()) {
-            try {
-                // Парсим JSON строку model_info в Map
-                Map<String, Object> modelInfo = objectMapper.readValue(
-                        product.getModel_info(),
-                        new TypeReference<Map<String, Object>>() {}
-                );
-
-                if (modelInfo != null && modelInfo.containsKey("count")) {
-                    Object countObj = modelInfo.get("count");
-                    if (countObj instanceof Integer) {
-                        modelCount = (Integer) countObj;
-                    } else if (countObj instanceof Number) {
-                        modelCount = ((Number) countObj).intValue();
-                    } else if (countObj instanceof String) {
-                        try {
-                            modelCount = Integer.parseInt((String) countObj);
-                        } catch (NumberFormatException e) {
-                            log.warn("Неверный формат count в model_info: {}", countObj);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Ошибка при парсинге model_info JSON: {}", product.getModel_info(), e);
-            }
-        }
-
-        return ProductFrontendResponse.builder()
-                .image(image)
-                .name(product.getName())
-                .id(product.getProductId().toString())
-                .price(priceStr)
-                .sku(product.getSku())
-                .offerId(product.getOfferId())
-                .modelCount(modelCount)  // Теперь здесь будет правильное количество
-                .statuses(statuses)
-                .colorIndex(colorIndex)
-                .barcode(product.getBarcodes())
-                .ozonArticle(ozonArticle)
-                .sellerArticle(sellerArticle)
-                .stock(stock)
-                .color(color)
-                .tags(tags)
-                .build();
-    }
-
     public ProductFrontendResponse mapToFrontendResponse(ProductInfo productInfo) {
         String image = (productInfo.getImages() != null && !productInfo.getImages().isEmpty())
                 ? productInfo.getImages().get(0)
@@ -365,6 +295,8 @@ public class OzonServiceIml implements OzonService {
             }
         }
 
+        List<String> tags = productInfo.getTags();
+
         String colorIndex = null;
         if (productInfo.getPriceIndexes() != null &&
                 productInfo.getPriceIndexes().containsKey("color_index")) {
@@ -382,6 +314,7 @@ public class OzonServiceIml implements OzonService {
                 .modelCount(modelCount)  // Теперь здесь будет правильное количество
                 .statuses((List<String>) productInfo.getStatuses())
                 .colorIndex(colorIndex)
+                .tags(tags)
                 .build();
     }
 
@@ -391,6 +324,7 @@ public class OzonServiceIml implements OzonService {
             return ProductInfo.builder()
                     .userId(product.getUserId())
                     .id(product.getProductId())
+                    .tags(parseJson(product.getTags(), new TypeReference<List<String>>() {}))
                     .name(product.getName())
                     .folderId(product.getFolderId())
                     .size(product.getSize())
@@ -474,7 +408,7 @@ public class OzonServiceIml implements OzonService {
         String sellerArticle = product.getOfferId();
 
         // Теги — пока пусто, как в старом методе
-        List<String> tags = new ArrayList<>();
+        List<String> tags = product.getTags();
 
         // Статусы — парсим как в старом методе
         List<String> statuses = new ArrayList<>();
@@ -704,9 +638,14 @@ public class OzonServiceIml implements OzonService {
     @Override
     @Transactional
     public ProductInfo saveProduct(ProductInfo productInfo) {
-        OzonProduct entity = mapToOzonProduct(productInfo); // метод для маппинга DTO -> Entity
-        entity = ozonProductRepository.save(entity);           // сохраняем в БД
-        return mapToProductInfo(entity);                   // возвращаем DTO
+        // Проверяем, что userId установлен
+        if (productInfo.getUserId() == null) {
+            throw new IllegalArgumentException("userId не может быть null при сохранении товара");
+        }
+
+        OzonProduct entity = mapToOzonProduct(productInfo);
+        entity = ozonProductRepository.save(entity);
+        return mapToProductInfo(entity);
     }
 
     private OzonProduct mapToOzonProduct(ProductInfo info) {
@@ -715,6 +654,8 @@ public class OzonServiceIml implements OzonService {
         }
 
         OzonProduct product = OzonProduct.builder()
+                .tags(info.getTags() != null ? serializeToJson(info.getTags()) : null)
+                .userId(info.getUserId())
                 .productId(info.getId())
                 .name(info.getName())
                 .sku(info.getSku())
