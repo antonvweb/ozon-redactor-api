@@ -72,7 +72,7 @@ public class FolderController {
     }
 
     /**
-     * Получить папки определенного уровня
+     * Получить папки определенного уровн
      */
     @GetMapping("/tree")
     public ResponseEntity<List<FolderTreeDto>> getFolderTree(
