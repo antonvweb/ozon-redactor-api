@@ -388,53 +388,54 @@ public class OzonServiceIml implements OzonService {
     ProductInfo mapToProductInfo(OzonProduct product) {
         if (product == null) return null;
         try {
-            return new ProductInfo(
-                    product.getUserId(),
-                    product.getProductId(),
-                    product.getName(),
-                    product.getFolderId(),
-                    product.getSize(),
-                    product.getOfferId(),
-                    product.getIsArchived(),
-                    product.getIsAutoarchived(),
-                    parseJson(product.getBarcodes(), new TypeReference<List<String>>() {}),
-                    product.getDescriptionCategoryId(),
-                    product.getTypeId(),
-                    product.getProductCreatedAt() != null ? product.getProductCreatedAt().toString() : null,
-                    parseJson(product.getImages(), new TypeReference<List<String>>() {}),
-                    product.getCurrencyCode(),
-                    product.getMinPrice() != null ? product.getMinPrice().toString() : null,
-                    product.getOldPrice() != null ? product.getOldPrice().toString() : null,
-                    product.getPrice() != null ? product.getPrice().toString() : null,
-                    parseJson(product.getSources(), new TypeReference<List<Map<String, Object>>>() {}),
-                    parseJson(product.getModel_info(), new TypeReference<Map<String, Object>>() {}),
-                    parseJson(product.getCommissions(), new TypeReference<List<Map<String, Object>>>() {}),
-                    product.getIsPrepaymentAllowed(),
-                    product.getVolumeWeight() != null ? product.getVolumeWeight().doubleValue() : null,
-                    product.getHasDiscountedFboItem(),
-                    product.getIsDiscounted(),
-                    product.getDiscountedFboStocks(),
-                    parseJson(product.getStocks(), new TypeReference<Map<String, Object>>() {}),
-                    parseJson(product.getErrors(), new TypeReference<List<Map<String, Object>>>() {}),
-                    product.getProductUpdatedAt() != null ? product.getProductUpdatedAt().toString() : null,
-                    product.getVat() != null ? product.getVat().toString() : null,
-                    parseJson(product.getVisibility_details(), new TypeReference<Map<String, Object>>() {}),
-                    parseJson(product.getPrice_indexes(), new TypeReference<Map<String, Object>>() {}),
-                    parseJson(product.getImages360(), new TypeReference<List<String>>() {}),
-                    product.getIsKgt(),
-                    parseJson(product.getColor_image(), new TypeReference<List<String>>() {}),
-                    parseJson(product.getPrimary_image(), new TypeReference<List<String>>() {}),
-                    parseJson(product.getStatuses(), new TypeReference<Map<String, Object>>() {}),
-                    product.getIsSuper(),
-                    product.getIsSeasonal(),
-                    parseJson(product.getPromotions(), new TypeReference<List<Map<String, Object>>>() {}),
-                    product.getSku(),
-                    parseJson(product.getAvailabilities(), new TypeReference<List<Map<String, Object>>>() {})
-            );
+            return ProductInfo.builder()
+                    .userId(product.getUserId())
+                    .id(product.getProductId())
+                    .name(product.getName())
+                    .folderId(product.getFolderId())
+                    .size(product.getSize())
+                    .offerId(product.getOfferId())
+                    .isArchived(product.getIsArchived())
+                    .isAutoarchived(product.getIsAutoarchived())
+                    .barcodes(parseJson(product.getBarcodes(), new TypeReference<List<String>>() {}))
+                    .descriptionCategoryId(product.getDescriptionCategoryId())
+                    .typeId(product.getTypeId())
+                    .createdAt(product.getProductCreatedAt() != null ? product.getProductCreatedAt().toString() : null)
+                    .images(parseJson(product.getImages(), new TypeReference<List<String>>() {}))
+                    .currencyCode(product.getCurrencyCode())
+                    .minPrice(product.getMinPrice() != null ? product.getMinPrice().toString() : null)
+                    .oldPrice(product.getOldPrice() != null ? product.getOldPrice().toString() : null)
+                    .price(product.getPrice() != null ? product.getPrice().toString() : null)
+                    .sources(parseJson(product.getSources(), new TypeReference<List<Map<String, Object>>>() {}))
+                    .modelInfo(parseJson(product.getModel_info(), new TypeReference<Map<String, Object>>() {}))
+                    .commissions(parseJson(product.getCommissions(), new TypeReference<List<Map<String, Object>>>() {}))
+                    .isPrepaymentAllowed(product.getIsPrepaymentAllowed())
+                    .volumeWeight(product.getVolumeWeight() != null ? product.getVolumeWeight().doubleValue() : null)
+                    .hasDiscountedFboItem(product.getHasDiscountedFboItem())
+                    .isDiscounted(product.getIsDiscounted())
+                    .discountedFboStocks(product.getDiscountedFboStocks())
+                    .stocks(parseJson(product.getStocks(), new TypeReference<Map<String, Object>>() {}))
+                    .errors(parseJson(product.getErrors(), new TypeReference<List<Map<String, Object>>>() {}))
+                    .updatedAt(product.getProductUpdatedAt() != null ? product.getProductUpdatedAt().toString() : null)
+                    .vat(product.getVat() != null ? product.getVat().toString() : null)
+                    .visibilityDetails(parseJson(product.getVisibility_details(), new TypeReference<Map<String, Object>>() {}))
+                    .priceIndexes(parseJson(product.getPrice_indexes(), new TypeReference<Map<String, Object>>() {}))
+                    .images360(parseJson(product.getImages360(), new TypeReference<List<String>>() {}))
+                    .isKgt(product.getIsKgt())
+                    .colorImage(parseJson(product.getColor_image(), new TypeReference<List<String>>() {}))
+                    .primaryImage(parseJson(product.getPrimary_image(), new TypeReference<List<String>>() {}))
+                    .statuses(parseJson(product.getStatuses(), new TypeReference<Map<String, Object>>() {}))
+                    .isSuper(product.getIsSuper())
+                    .isSeasonal(product.getIsSeasonal())
+                    .promotions(parseJson(product.getPromotions(), new TypeReference<List<Map<String, Object>>>() {}))
+                    .sku(product.getSku())
+                    .availabilities(parseJson(product.getAvailabilities(), new TypeReference<List<Map<String, Object>>>() {}))
+                    .build();
         } catch (Exception e) {
             throw new RuntimeException("Ошибка маппинга OzonProduct в ProductInfo", e);
         }
     }
+
 
     @SuppressWarnings("unchecked")
     private <T> T parseJson(String json, TypeReference<T> typeReference) {
