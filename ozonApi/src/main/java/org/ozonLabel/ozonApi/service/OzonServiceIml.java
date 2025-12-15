@@ -360,7 +360,7 @@ public class OzonServiceIml implements OzonService {
                 try {
                     modelCount = Integer.parseInt((String) countObj);
                 } catch (NumberFormatException e) {
-                    log.warn("Неверный формат count в modelInfo: {}", countObj);
+                    log.warn("Неверный форма count в modelInfo: {}", countObj);
                 }
             }
         }
