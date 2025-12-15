@@ -414,12 +414,15 @@ public class CompanyServiceIml implements CompanyService {
      */
     @Cacheable(value = "userCompanyAccess", key = "#userEmail + '_' + #companyOwnerId")
     public MemberRole checkAccess(String userEmail, Long companyOwnerId) {
+        log.info("checkAccess called: userEmail={}, companyOwnerId={}", userEmail, companyOwnerId);
         User user = getUserByEmail(userEmail);
 
         if (user.getId().equals(companyOwnerId)) {
+            log.info("Owner access granted for user {} to company {}", user.getId(), companyOwnerId);
             return MemberRole.ADMIN;
         }
 
+        log.info("Looking for member role...");
         return companyMemberRepository.findRoleByCompanyOwnerIdAndMemberUserId(companyOwnerId, user.getId())
                 .orElseThrow(() -> new AccessDeniedException("No access to this company"));
     }

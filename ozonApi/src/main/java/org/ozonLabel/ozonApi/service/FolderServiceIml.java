@@ -105,7 +105,7 @@ public class FolderServiceIml implements FolderService {
 
     @Cacheable(value = "folderTrees", key = "#companyOwnerId")
     public List<FolderTreeDto> getFolderTree(String userEmail, Long companyOwnerId) {
-        // Проверяем доступ к компании
+        log.info("getFolderTree called: userEmail={}, companyOwnerId={}", userEmail, companyOwnerId);
         companyService.checkAccess(userEmail, companyOwnerId);
 
         List<ProductFolder> rootFolders = folderRepository
