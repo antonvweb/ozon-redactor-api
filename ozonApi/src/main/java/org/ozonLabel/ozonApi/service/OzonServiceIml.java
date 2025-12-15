@@ -53,6 +53,12 @@ public class OzonServiceIml implements OzonService {
         UserResponseDto user = userService.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("Пользователь с ID " + userId + " не найден"));
 
+        log.info("ПЕРЕД validate: Class={} ozonClientId='{}' ozonApiKey='{}' hash={}",
+                user.getClass().getName(),
+                user.getOzonClientId(),
+                user.getOzonApiKey(),
+                System.identityHashCode(user));
+
         validateUserCredentials(user);
 
         // Проверяем существование папки, если указана
