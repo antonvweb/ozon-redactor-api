@@ -126,8 +126,10 @@ public class ProductCreationServiceIml implements ProductCreationService {
      * Преобразует сущность OzonProduct в DTO ProductInfo
      */
     private ProductInfo mapToProductInfo(OzonProduct product) {
+        if (product == null) return null;
+
         ProductInfo info = new ProductInfo();
-        product.setUserId(info.getUserId());
+        info.setUserId(product.getUserId());  // ⬅️ ВОТ ЭТО СТРОКА - установите userId!
         info.setId(product.getProductId());
         info.setName(product.getName());
         info.setSku(product.getSku());
