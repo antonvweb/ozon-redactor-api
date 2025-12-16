@@ -361,19 +361,60 @@ public class OzonController {
     public ResponseEntity<Map<String, Object>> getProductsInFolder(
             @PathVariable Long folderId,
             @RequestParam Long companyOwnerId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        // Проверяем доступ к компании
         companyService.checkAccess(userEmail, companyOwnerId);
-        log.info("Получение товаров из папки {} для пользователя {}", folderId, companyOwnerId);
+
         Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId, pageable);
+        Page<OzonProduct> productsPage;
+
+        // Если есть поиск и сортировка
+        if (search != null && !search.trim().isEmpty() && sortBy != null && !sortBy.trim().isEmpty()) {
+            productsPage = productRepository.searchProductsInFolderWithSort(
+                    companyOwnerId,
+                    folderId,
+                    search.trim(),
+                    sortBy,
+                    sortDirection.toUpperCase(),
+                    pageable
+            );
+            log.info("Поиск '{}' в папке {} с сортировкой по {} ({}) для пользователя {}",
+                    search, folderId, sortBy, sortDirection, companyOwnerId);
+        }
+        // Только поиск без сортировки
+        else if (search != null && !search.trim().isEmpty()) {
+            productsPage = productRepository.searchProductsInFolder(companyOwnerId, folderId, search.trim(), pageable);
+            log.info("Поиск '{}' в папке {} для пользователя {}", search, folderId, companyOwnerId);
+        }
+        // Только сортировка без поиска
+        else if (sortBy != null && !sortBy.trim().isEmpty()) {
+            productsPage = productRepository.searchProductsInFolderWithSort(
+                    companyOwnerId,
+                    folderId,
+                    "",
+                    sortBy,
+                    sortDirection.toUpperCase(),
+                    pageable
+            );
+            log.info("Сортировка в папке {} по {} ({}) для пользователя {}",
+                    folderId, sortBy, sortDirection, companyOwnerId);
+        }
+        // Без поиска и сортировки
+        else {
+            productsPage = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId, pageable);
+            log.info("Получение товаров из папки {} для пользователя {}", folderId, companyOwnerId);
+        }
+
         List<ProductFrontendResponse> responses = productsPage.getContent().stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
+
         Map<String, Object> response = new HashMap<>();
         response.put("products", responses);
         response.put("currentPage", productsPage.getNumber());
@@ -426,6 +467,8 @@ public class OzonController {
     public ResponseEntity<Map<String, Object>> getAllProducts(
             @RequestParam Long companyOwnerId,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
@@ -436,10 +479,36 @@ public class OzonController {
         Pageable pageable = PageRequest.of(page, size);
         Page<OzonProduct> productsPage;
 
-        if (search != null && !search.trim().isEmpty()) {
+        // Если есть поиск и сортировка
+        if (search != null && !search.trim().isEmpty() && sortBy != null && !sortBy.trim().isEmpty()) {
+            productsPage = productRepository.searchProductsWithSort(
+                    companyOwnerId,
+                    search.trim(),
+                    sortBy,
+                    sortDirection.toUpperCase(),
+                    pageable
+            );
+            log.info("Поиск '{}' с сортировкой по {} ({}) для пользователя {}",
+                    search, sortBy, sortDirection, companyOwnerId);
+        }
+        // Только поиск без сортировки
+        else if (search != null && !search.trim().isEmpty()) {
             productsPage = productRepository.searchProducts(companyOwnerId, search.trim(), pageable);
             log.info("Поиск '{}' для пользователя {}", search, companyOwnerId);
-        } else {
+        }
+        // Только сортировка без поиска
+        else if (sortBy != null && !sortBy.trim().isEmpty()) {
+            productsPage = productRepository.searchProductsWithSort(
+                    companyOwnerId,
+                    "",
+                    sortBy,
+                    sortDirection.toUpperCase(),
+                    pageable
+            );
+            log.info("Сортировка по {} ({}) для пользователя {}", sortBy, sortDirection, companyOwnerId);
+        }
+        // Без поиска и сортировки
+        else {
             productsPage = productRepository.findByUserIdOrderByUpdatedAtDesc(companyOwnerId, pageable);
             log.info("Получение всех товаров для пользователя {}", companyOwnerId);
         }
