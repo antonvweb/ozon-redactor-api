@@ -113,9 +113,9 @@ jobs:
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -ex
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            sudo pm2 delete user-service || true
-            sudo pm2 start ecosystem.backend.config.js --only user-service --update-env
-            sudo pm2 save
+            pm2 delete user-service || true
+            pm2 start ecosystem.backend.config.js --only user-service --update-env
+            pm2 save
           EOF
 
   # 5. Остальные сервисы (не зависят от notification)
@@ -141,9 +141,9 @@ jobs:
             cd ${{ secrets.DEPLOY_PROD_PATH }}/authService
             mvn clean package -DskipTests
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            sudo pm2 delete auth-service || true
-            sudo pm2 start ecosystem.backend.config.js --only auth-service --update-env
-            sudo pm2 save
+            pm2 delete auth-service || true
+            pm2 start ecosystem.backend.config.js --only auth-service --update-env
+            pm2 save
           EOF
 
   deploy-ozonApi:
@@ -168,7 +168,7 @@ jobs:
             cd ${{ secrets.DEPLOY_PROD_PATH }}/ozonApi
             mvn clean install -DskipTests
             cd ${{ secrets.DEPLOY_PROD_PATH }}
-            sudo pm2 delete ozon-api || true
-            sudo pm2 start ecosystem.backend.config.js --only ozon-api --update-env
-            sudo pm2 save
+            pm2 delete ozon-api || true
+            pm2 start ecosystem.backend.config.js --only ozon-api --update-env
+            pm2 save
           EOF
