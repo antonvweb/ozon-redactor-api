@@ -431,16 +431,15 @@ public class OzonController {
         String userEmail = auth.getName();
         companyService.checkAccess(userEmail, companyOwnerId);
 
-        // Маппинг фронтенд-ключей на поля БД (включая JSONB для штрихкода)
         Map<String, String> sortFieldMap = new HashMap<>();
         sortFieldMap.put("name", "name");
-        sortFieldMap.put("barcode", "(barcodes ->> 0)");        // первый штрихкод из массива
+        sortFieldMap.put("barcode", "(barcodes ->> 0)");
         sortFieldMap.put("ozonArticle", "sku");
-        sortFieldMap.put("sellerArticle", "offer_id");
+        sortFieldMap.put("sellerArticle", "offerId");  // ← важно: offerId, а не offer_id!
         sortFieldMap.put("price", "price");
-        sortFieldMap.put("updatedAt", "updated_at");           // по умолчанию
+        sortFieldMap.put("updatedAt", "updatedAt");    // ← ИСПРАВЛЕНО: имя свойства в Java, а не колонка!
 
-        String field = sortFieldMap.getOrDefault(sortBy, "updated_at");
+        String field = sortFieldMap.getOrDefault(sortBy, "updatedAt");  // ← дефолт тоже по имени свойства
         Sort.Direction dir = Sort.Direction.fromString(sortDir.toUpperCase());
 
         Sort sort;
@@ -493,11 +492,11 @@ public class OzonController {
         sortFieldMap.put("name", "name");
         sortFieldMap.put("barcode", "(barcodes ->> 0)");
         sortFieldMap.put("ozonArticle", "sku");
-        sortFieldMap.put("sellerArticle", "offer_id");
+        sortFieldMap.put("sellerArticle", "offerId");  // ← важно: offerId, а не offer_id!
         sortFieldMap.put("price", "price");
-        sortFieldMap.put("updatedAt", "updated_at");
+        sortFieldMap.put("updatedAt", "updatedAt");    // ← ИСПРАВЛЕНО: имя свойства в Java, а не колонка!
 
-        String field = sortFieldMap.getOrDefault(sortBy, "updated_at");
+        String field = sortFieldMap.getOrDefault(sortBy, "updatedAt");  // ← дефолт тоже по имени свойства
         Sort.Direction dir = Sort.Direction.fromString(sortDir.toUpperCase());
 
         Sort sort;
@@ -549,11 +548,11 @@ public class OzonController {
         sortFieldMap.put("name", "name");
         sortFieldMap.put("barcode", "(barcodes ->> 0)");
         sortFieldMap.put("ozonArticle", "sku");
-        sortFieldMap.put("sellerArticle", "offer_id");
+        sortFieldMap.put("sellerArticle", "offerId");  // ← важно: offerId, а не offer_id!
         sortFieldMap.put("price", "price");
-        sortFieldMap.put("updatedAt", "updated_at");
+        sortFieldMap.put("updatedAt", "updatedAt");    // ← ИСПРАВЛЕНО: имя свойства в Java, а не колонка!
 
-        String field = sortFieldMap.getOrDefault(sortBy, "updated_at");
+        String field = sortFieldMap.getOrDefault(sortBy, "updatedAt");  // ← дефолт тоже по имени свойства
         Sort.Direction dir = Sort.Direction.fromString(sortDir.toUpperCase());
 
         Sort sort;
