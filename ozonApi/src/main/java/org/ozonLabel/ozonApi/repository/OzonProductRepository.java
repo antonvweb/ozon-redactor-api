@@ -16,11 +16,14 @@ import java.util.Optional;
 public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> {
     boolean existsByUserIdAndProductId(Long userId, Long productId);
 
+
     Optional<OzonProduct> findByUserIdAndProductId(Long userId, Long productId);
     List<OzonProduct> findByUserId(Long userId);
 
-    // Changed: Remove fixed ORDER BY; use Pageable for dynamic sort
-    Page<OzonProduct> findByUserId(Long userId, Pageable pageable);
+    @Query("SELECT p FROM OzonProduct p WHERE p.userId = :userId ORDER BY p.updatedAt DESC")
+    List<OzonProduct> findByUserIdOrderByUpdatedAtDesc(@Param("userId") Long userId);
+
+    Page<OzonProduct> findByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
 
     void deleteByUserId(Long userId);
 
@@ -126,10 +129,4 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
                                                   Pageable pageable);
 
     Page<OzonProduct> findByUserIdAndSize(Long userId, String size, Pageable pageable);
-
-    @Query("SELECT p FROM OzonProduct p WHERE p.userId = :userId ORDER BY p.updatedAt DESC")
-    List<OzonProduct> findByUserIdOrderByUpdatedAtDesc(@Param("userId") Long userId);
-
-    Page<OzonProduct> findByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
-
 }
