@@ -387,10 +387,26 @@ public class OzonServiceIml implements OzonService {
             return null;
         }
 
-        // Первая картинка из списка images
-        String image = (product.getImages() != null && !product.getImages().isEmpty())
-                ? product.getImages().get(0)
-                : null;
+        // Получаем картинку из поля primaryImage
+        String image = null;
+        List<String> primaryImage = product.getPrimaryImage();
+        if (primaryImage != null && !primaryImage.isEmpty()) {
+            // Берем первую картинку из списка
+            image = primaryImage.get(0);
+
+            // Если строка содержит экранированные кавычки, очищаем их
+            if (image != null && image.startsWith("[\"") && image.endsWith("\"]")) {
+                // Убираем квадратные скобки и экранированные кавычки
+                image = image.substring(2, image.length() - 2);
+            }
+        }
+
+        // Если primaryImage пустое, можно вернуться к старому способу как fallback
+        if (image == null || image.isEmpty()) {
+            image = (product.getImages() != null && !product.getImages().isEmpty())
+                    ? product.getImages().get(0)
+                    : null;
+        }
 
         // Цена как строка
         String priceStr = product.getPrice() != null ? product.getPrice() : "0";
