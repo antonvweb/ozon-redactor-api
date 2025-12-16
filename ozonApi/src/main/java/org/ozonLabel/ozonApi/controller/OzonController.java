@@ -484,7 +484,8 @@ public class OzonController {
             case "offerId": return "offerId";
             case "price": return "price";
             case "size": return "size";
-            case "stock": return "stocks"; // или другое поле
+            case "stock": return "stock";  // Исправить с "stocks" на "stock" (предполагая имя поля в entity)
+            case "barcode": return "barcode";  // Добавить, если поле существует в OzonProduct
             default: return "updatedAt";
         }
     }
