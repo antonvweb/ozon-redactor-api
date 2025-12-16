@@ -395,8 +395,49 @@ public class OzonServiceIml implements OzonService {
         // Цена как строка
         String priceStr = product.getPrice() != null ? product.getPrice() : "0";
 
-        // Расчёт остатков (stocks уже Map<String, Object>)
-        Integer stock = calculateStockFromMap(product.getStocks());
+        // Получаем stocks как Map<String, Object>
+        Map<String, Object> stocksData = product.getStocks();
+        Integer stock = 0;
+
+        if (stocksData != null) {
+            try {
+                // Проверяем, есть ли поле "stocks" в Map
+                Object stocksObj = stocksData.get("stocks");
+
+                if (stocksObj instanceof String) {
+                    // Если это JSON строка (ваш случай)
+                    String stocksJson = (String) stocksObj;
+                    String fixedJson = stocksJson.replace("\"\"", "\"");
+
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    // Парсим JSON строку в List<Map>
+                    List<Map<String, Object>> stocksList = objectMapper.readValue(fixedJson,
+                            new TypeReference<List<Map<String, Object>>>() {});
+
+                    if (stocksList != null && !stocksList.isEmpty()) {
+                        // Берем первый элемент и значение present
+                        Map<String, Object> firstStock = stocksList.get(0);
+                        Object presentObj = firstStock.get("present");
+                        if (presentObj instanceof Number) {
+                            stock = ((Number) presentObj).intValue();
+                        }
+                    }
+                } else if (stocksObj instanceof List) {
+                    // Если это уже список (может быть уже распарсено)
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> stocksList = (List<Map<String, Object>>) stocksObj;
+                    if (!stocksList.isEmpty()) {
+                        Map<String, Object> firstStock = stocksList.get(0);
+                        Object presentObj = firstStock.get("present");
+                        if (presentObj instanceof Number) {
+                            stock = ((Number) presentObj).intValue();
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Ошибка при обработке stocks: {}", e.getMessage());
+            }
+        }
 
         // Цвет — берём из size (как было в старом методе)
         String color = product.getSize();
@@ -455,7 +496,7 @@ public class OzonServiceIml implements OzonService {
                 .modelCount(modelCount)
                 .statuses(statuses)
                 .colorIndex(colorIndex)
-                .barcode(product.getBarcodes() != null ? String.join(",", product.getBarcodes()) : null)  // или List<String>, если фронт поддерживает
+                .barcode(product.getBarcodes() != null ? String.join(",", product.getBarcodes()) : null)
                 .ozonArticle(ozonArticle)
                 .sellerArticle(sellerArticle)
                 .stock(stock)
