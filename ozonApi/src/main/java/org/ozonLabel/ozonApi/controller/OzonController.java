@@ -416,43 +416,6 @@ public class OzonController {
     }
 
     /**
-     * Получить товары без папки
-     */
-    @GetMapping("/products/no-folder")
-    public ResponseEntity<Map<String, Object>> getProductsWithoutFolder(
-            @RequestParam Long companyOwnerId,
-            @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            Authentication auth) {
-
-        String userEmail = auth.getName();
-        companyService.checkAccess(userEmail, companyOwnerId);
-
-        Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> productsPage;
-
-        if (search != null && !search.trim().isEmpty()) {
-            productsPage = productRepository.searchProductsWithoutFolder(companyOwnerId, search.trim(), pageable);
-            log.info("Поиск '{}' среди товаров без папки для пользователя {}", search, companyOwnerId);
-        } else {
-            productsPage = productRepository.findByUserIdAndFolderIdIsNull(companyOwnerId, pageable);
-            log.info("Получение товаров без папки для пользователя {}", companyOwnerId);
-        }
-
-        List<ProductFrontendResponse> responses = productsPage.getContent().stream()
-                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
-                .collect(Collectors.toList());
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("products", responses);
-        response.put("currentPage", productsPage.getNumber());
-        response.put("totalPages", productsPage.getTotalPages());
-        response.put("totalElements", productsPage.getTotalElements());
-        return ResponseEntity.ok(response);
-    }
-
-    /**
      * Получить все товары пользователя
      */
     @GetMapping("/products/no-folder")
