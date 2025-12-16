@@ -128,16 +128,5 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
                                                   @Param("searchTerm") String searchTerm,
                                                   Pageable pageable);
 
-    @Query("SELECT p FROM OzonProduct p WHERE p.userId = :userId ORDER BY " +
-            "CASE WHEN :sortBy = 'name' THEN p.name END :sortDirection, " +
-            "CASE WHEN :sortBy = 'price' THEN p.price END :sortDirection, " +
-            "CASE WHEN :sortBy = 'sku' THEN CAST(p.sku AS string) END :sortDirection, " +
-            "CASE WHEN :sortBy = 'offerId' THEN p.offerId END :sortDirection, " +
-            "CASE WHEN :sortBy = 'size' THEN p.size END :sortDirection")
-    Page<OzonProduct> findByUserIdWithSort(@Param("userId") Long userId,
-                                           @Param("sortBy") String sortBy,
-                                           @Param("sortDirection") String sortDirection,
-                                           Pageable pageable);
-
     Page<OzonProduct> findByUserIdAndSize(Long userId, String size, Pageable pageable);
 }

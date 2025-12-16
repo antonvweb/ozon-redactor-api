@@ -10,7 +10,6 @@ import org.ozonLabel.common.service.ozon.ProductCreationService;
 import org.ozonLabel.common.service.user.CompanyService;
 import org.ozonLabel.ozonApi.entity.OzonProduct;
 import org.ozonLabel.ozonApi.repository.OzonProductRepository;
-import org.ozonLabel.ozonApi.service.OzonServiceIml;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
