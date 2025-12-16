@@ -14,6 +14,7 @@ import org.ozonLabel.ozonApi.service.OzonServiceIml;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -361,15 +362,26 @@ public class OzonController {
     public ResponseEntity<Map<String, Object>> getProductsInFolder(
             @PathVariable Long folderId,
             @RequestParam Long companyOwnerId,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false, defaultValue = "asc") String direction,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        // Проверяем доступ к компании
         companyService.checkAccess(userEmail, companyOwnerId);
+
+        Pageable pageable;
+        if (sort != null && !sort.isEmpty()) {
+            Sort.Direction sortDirection = "desc".equalsIgnoreCase(direction)
+                    ? Sort.Direction.DESC
+                    : Sort.Direction.ASC;
+            pageable = PageRequest.of(page, size, Sort.by(sortDirection, mapSortField(sort)));
+        } else {
+            pageable = PageRequest.of(page, size);
+        }
+
         log.info("Получение товаров из папки {} для пользователя {}", folderId, companyOwnerId);
-        Pageable pageable = PageRequest.of(page, size);
         Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId, pageable);
         List<ProductFrontendResponse> responses = productsPage.getContent().stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
@@ -426,6 +438,8 @@ public class OzonController {
     public ResponseEntity<Map<String, Object>> getAllProducts(
             @RequestParam Long companyOwnerId,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false, defaultValue = "asc") String direction,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
@@ -433,7 +447,16 @@ public class OzonController {
         String userEmail = auth.getName();
         companyService.checkAccess(userEmail, companyOwnerId);
 
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable;
+        if (sort != null && !sort.isEmpty()) {
+            Sort.Direction sortDirection = "desc".equalsIgnoreCase(direction)
+                    ? Sort.Direction.DESC
+                    : Sort.Direction.ASC;
+            pageable = PageRequest.of(page, size, Sort.by(sortDirection, mapSortField(sort)));
+        } else {
+            pageable = PageRequest.of(page, size);
+        }
+
         Page<OzonProduct> productsPage;
 
         if (search != null && !search.trim().isEmpty()) {
@@ -454,6 +477,17 @@ public class OzonController {
         response.put("totalPages", productsPage.getTotalPages());
         response.put("totalElements", productsPage.getTotalElements());
         return ResponseEntity.ok(response);
+    }
+
+    private String mapSortField(String field) {
+        switch (field) {
+            case "sku": return "sku";
+            case "offerId": return "offerId";
+            case "price": return "price";
+            case "size": return "size";
+            case "stock": return "stocks"; // или другое поле
+            default: return "updatedAt";
+        }
     }
 
     /**

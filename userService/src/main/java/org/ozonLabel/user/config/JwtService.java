@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.Date;
 
-// src/main/java/org/ozonLabel/config/JwtService.java
 @Service
 public class JwtService {
 
