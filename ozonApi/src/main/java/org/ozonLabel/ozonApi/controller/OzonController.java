@@ -14,6 +14,8 @@ import org.ozonLabel.ozonApi.service.OzonServiceIml;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -361,19 +363,50 @@ public class OzonController {
     public ResponseEntity<Map<String, Object>> getProductsInFolder(
             @PathVariable Long folderId,
             @RequestParam Long companyOwnerId,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "updatedAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        // Проверяем доступ к компании
         companyService.checkAccess(userEmail, companyOwnerId);
-        log.info("Получение товаров из папки {} для пользователя {}", folderId, companyOwnerId);
-        Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> productsPage = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId, pageable);
+
+        Map<String, String> sortFieldMap = new HashMap<>();
+        sortFieldMap.put("name", "name");
+        sortFieldMap.put("barcode", "(barcodes ->> 0)");
+        sortFieldMap.put("ozonArticle", "sku");
+        sortFieldMap.put("sellerArticle", "offer_id");
+        sortFieldMap.put("price", "price");
+
+        String field = sortFieldMap.getOrDefault(sortBy, "updated_at");
+
+        Sort.Direction dir = Sort.Direction.fromString(sortDir);
+
+        Sort sort;
+        if (field.startsWith("(")) {
+            sort = JpaSort.unsafe(dir, field);
+        } else {
+            sort = Sort.by(dir, field);
+        }
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<OzonProduct> productsPage;
+
+        if (search != null && !search.trim().isEmpty()) {
+            productsPage = productRepository.searchProductsInFolder(companyOwnerId, folderId, search.trim(), pageable);
+            log.info("Поиск '{}' в папке {} для пользователя {}", search, folderId, companyOwnerId);
+        } else {
+            productsPage = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId, pageable);
+            log.info("Получение товаров в папке {} для пользователя {}", folderId, companyOwnerId);
+        }
+
         List<ProductFrontendResponse> responses = productsPage.getContent().stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
+
         Map<String, Object> response = new HashMap<>();
         response.put("products", responses);
         response.put("currentPage", productsPage.getNumber());
@@ -422,25 +455,104 @@ public class OzonController {
     /**
      * Получить все товары пользователя
      */
+    @GetMapping("/products/no-folder")
+    public ResponseEntity<Map<String, Object>> getProductsWithoutFolder(
+            @RequestParam Long companyOwnerId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "updatedAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        // Маппинг фронтенд-ключей на поля БД (включая JSONB для штрихкода)
+        Map<String, String> sortFieldMap = new HashMap<>();
+        sortFieldMap.put("name", "name");
+        sortFieldMap.put("barcode", "(barcodes ->> 0)");        // первый штрихкод из массива
+        sortFieldMap.put("ozonArticle", "sku");
+        sortFieldMap.put("sellerArticle", "offer_id");
+        sortFieldMap.put("price", "price");
+        sortFieldMap.put("updatedAt", "updated_at");           // по умолчанию
+
+        String field = sortFieldMap.getOrDefault(sortBy, "updated_at");
+        Sort.Direction dir = Sort.Direction.fromString(sortDir.toUpperCase());
+
+        Sort sort;
+        if (field.startsWith("(")) {
+            // Для JSONB выражений используем unsafe сортировку
+            sort = JpaSort.unsafe(dir, field);
+        } else {
+            sort = Sort.by(dir, field);
+        }
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<OzonProduct> productsPage;
+
+        if (search != null && !search.trim().isEmpty()) {
+            productsPage = productRepository.searchProductsWithoutFolder(companyOwnerId, search.trim(), pageable);
+            log.info("Поиск '{}' среди товаров без папки для пользователя {}", search, companyOwnerId);
+        } else {
+            productsPage = productRepository.findByUserIdAndFolderIdIsNull(companyOwnerId, pageable);
+            log.info("Получение товаров без папки для пользователя {}", companyOwnerId);
+        }
+
+        List<ProductFrontendResponse> responses = productsPage.getContent().stream()
+                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("products", responses);
+        response.put("currentPage", productsPage.getNumber());
+        response.put("totalPages", productsPage.getTotalPages());
+        response.put("totalElements", productsPage.getTotalElements());
+
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/products")
     public ResponseEntity<Map<String, Object>> getAllProducts(
             @RequestParam Long companyOwnerId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "updatedAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
             Authentication auth) {
 
         String userEmail = auth.getName();
         companyService.checkAccess(userEmail, companyOwnerId);
 
-        Pageable pageable = PageRequest.of(page, size);
+        Map<String, String> sortFieldMap = new HashMap<>();
+        sortFieldMap.put("name", "name");
+        sortFieldMap.put("barcode", "(barcodes ->> 0)");
+        sortFieldMap.put("ozonArticle", "sku");
+        sortFieldMap.put("sellerArticle", "offer_id");
+        sortFieldMap.put("price", "price");
+        sortFieldMap.put("updatedAt", "updated_at");
+
+        String field = sortFieldMap.getOrDefault(sortBy, "updated_at");
+        Sort.Direction dir = Sort.Direction.fromString(sortDir.toUpperCase());
+
+        Sort sort;
+        if (field.startsWith("(")) {
+            sort = JpaSort.unsafe(dir, field);
+        } else {
+            sort = Sort.by(dir, field);
+        }
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+
         Page<OzonProduct> productsPage;
 
         if (search != null && !search.trim().isEmpty()) {
             productsPage = productRepository.searchProducts(companyOwnerId, search.trim(), pageable);
-            log.info("Поиск '{}' для пользователя {}", search, companyOwnerId);
+            log.info("Поиск '{}' среди всех товаров для пользователя {}", search, companyOwnerId);
         } else {
-            productsPage = productRepository.findByUserIdOrderByUpdatedAtDesc(companyOwnerId, pageable);
+            productsPage = productRepository.findByUserId(companyOwnerId, pageable);
             log.info("Получение всех товаров для пользователя {}", companyOwnerId);
         }
 
@@ -453,26 +565,46 @@ public class OzonController {
         response.put("currentPage", productsPage.getNumber());
         response.put("totalPages", productsPage.getTotalPages());
         response.put("totalElements", productsPage.getTotalElements());
+
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Получить товары по размеру
-     */
     @GetMapping("/products/by-size")
     public ResponseEntity<Map<String, Object>> getProductsBySize(
             @RequestParam Long companyOwnerId,
             @RequestParam String size,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(defaultValue = "updatedAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
             Authentication auth) {
 
         String userEmail = auth.getName();
         companyService.checkAccess(userEmail, companyOwnerId);
-        log.info("Поиск товаров по размеру '{}' для пользователя {}", size, companyOwnerId);
 
-        Pageable pageable = PageRequest.of(page, pageSize);
-        Page<OzonProduct> productsPage = productRepository.findByUserIdAndSize(companyOwnerId, size, pageable);
+        Map<String, String> sortFieldMap = new HashMap<>();
+        sortFieldMap.put("name", "name");
+        sortFieldMap.put("barcode", "(barcodes ->> 0)");
+        sortFieldMap.put("ozonArticle", "sku");
+        sortFieldMap.put("sellerArticle", "offer_id");
+        sortFieldMap.put("price", "price");
+        sortFieldMap.put("updatedAt", "updated_at");
+
+        String field = sortFieldMap.getOrDefault(sortBy, "updated_at");
+        Sort.Direction dir = Sort.Direction.fromString(sortDir.toUpperCase());
+
+        Sort sort;
+        if (field.startsWith("(")) {
+            sort = JpaSort.unsafe(dir, field);
+        } else {
+            sort = Sort.by(dir, field);
+        }
+
+        Pageable pageable = PageRequest.of(page, pageSize, sort);
+
+        Page<OzonProduct> productsPage = productRepository.findByUserIdAndSize(companyOwnerId, size.toUpperCase(), pageable);
+
+        log.info("Поиск товаров по размеру '{}' для пользователя {}", size, companyOwnerId);
 
         List<ProductFrontendResponse> responses = productsPage.getContent().stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
@@ -483,6 +615,7 @@ public class OzonController {
         response.put("currentPage", productsPage.getNumber());
         response.put("totalPages", productsPage.getTotalPages());
         response.put("totalElements", productsPage.getTotalElements());
+
         return ResponseEntity.ok(response);
     }
 }
