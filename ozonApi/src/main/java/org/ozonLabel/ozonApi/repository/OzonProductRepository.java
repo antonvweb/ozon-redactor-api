@@ -126,4 +126,10 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
                                                   Pageable pageable);
 
     Page<OzonProduct> findByUserIdAndSize(Long userId, String size, Pageable pageable);
+
+    @Query("SELECT p FROM OzonProduct p WHERE p.userId = :userId ORDER BY p.updatedAt DESC")
+    List<OzonProduct> findByUserIdOrderByUpdatedAtDesc(@Param("userId") Long userId);
+
+    Page<OzonProduct> findByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
+
 }
