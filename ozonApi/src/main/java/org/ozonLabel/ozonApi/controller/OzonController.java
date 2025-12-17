@@ -12,6 +12,7 @@ import org.ozonLabel.ozonApi.entity.OzonProduct;
 import org.ozonLabel.ozonApi.repository.OzonProductRepository;
 import org.ozonLabel.ozonApi.service.OzonServiceIml;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -21,10 +22,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.math.BigDecimal;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -372,46 +371,19 @@ public class OzonController {
         companyService.checkAccess(userEmail, companyOwnerId);
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> productsPage;
+        String searchTerm = (search != null) ? search.trim() : "";
 
-        // Если есть поиск и сортировка
-        if (search != null && !search.trim().isEmpty() && sortBy != null && !sortBy.trim().isEmpty()) {
-            productsPage = productRepository.searchProductsInFolderWithSort(
-                    companyOwnerId,
-                    folderId,
-                    search.trim(),
-                    sortBy,
-                    sortDirection.toUpperCase(),
-                    pageable
-            );
-            log.info("Поиск '{}' в папке {} с сортировкой по {} ({}) для пользователя {}",
-                    search, folderId, sortBy, sortDirection, companyOwnerId);
-        }
-        // Только поиск без сортировки
-        else if (search != null && !search.trim().isEmpty()) {
-            productsPage = productRepository.searchProductsInFolder(companyOwnerId, folderId, search.trim(), pageable);
-            log.info("Поиск '{}' в папке {} для пользователя {}", search, folderId, companyOwnerId);
-        }
-        // Только сортировка без поиска
-        else if (sortBy != null && !sortBy.trim().isEmpty()) {
-            productsPage = productRepository.searchProductsInFolderWithSort(
-                    companyOwnerId,
-                    folderId,
-                    "",
-                    sortBy,
-                    sortDirection.toUpperCase(),
-                    pageable
-            );
-            log.info("Сортировка в папке {} по {} ({}) для пользователя {}",
-                    folderId, sortBy, sortDirection, companyOwnerId);
-        }
-        // Без поиска и сортировки
-        else {
-            productsPage = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId, pageable);
-            log.info("Получение товаров из папки {} для пользователя {}", folderId, companyOwnerId);
-        }
+        Page<OzonProduct> productsPage = productRepository.searchProductsInFolder(companyOwnerId, folderId, searchTerm, pageable);
+        log.info("Получение товаров из папки {} для пользователя {} с поиском '{}'", folderId, companyOwnerId, searchTerm);
 
-        List<ProductFrontendResponse> responses = productsPage.getContent().stream()
+        List<OzonProduct> content = productsPage.getContent();
+        String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
+        String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
+        sortProducts(content, effectiveSortBy, effectiveSortDirection);
+
+        productsPage = new PageImpl<>(content, pageable, productsPage.getTotalElements());
+
+        List<ProductFrontendResponse> responses = content.stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
 
@@ -430,6 +402,8 @@ public class OzonController {
     public ResponseEntity<Map<String, Object>> getProductsWithoutFolder(
             @RequestParam Long companyOwnerId,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
@@ -438,17 +412,19 @@ public class OzonController {
         companyService.checkAccess(userEmail, companyOwnerId);
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> productsPage;
+        String searchTerm = (search != null) ? search.trim() : "";
 
-        if (search != null && !search.trim().isEmpty()) {
-            productsPage = productRepository.searchProductsWithoutFolder(companyOwnerId, search.trim(), pageable);
-            log.info("Поиск '{}' среди товаров без папки для пользователя {}", search, companyOwnerId);
-        } else {
-            productsPage = productRepository.findByUserIdAndFolderIdIsNull(companyOwnerId, pageable);
-            log.info("Получение товаров без папки для пользователя {}", companyOwnerId);
-        }
+        Page<OzonProduct> productsPage = productRepository.searchProductsWithoutFolder(companyOwnerId, searchTerm, pageable);
+        log.info("Получение товаров без папки для пользователя {} с поиском '{}'", companyOwnerId, searchTerm);
 
-        List<ProductFrontendResponse> responses = productsPage.getContent().stream()
+        List<OzonProduct> content = productsPage.getContent();
+        String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
+        String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
+        sortProducts(content, effectiveSortBy, effectiveSortDirection);
+
+        productsPage = new PageImpl<>(content, pageable, productsPage.getTotalElements());
+
+        List<ProductFrontendResponse> responses = content.stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
 
@@ -459,7 +435,6 @@ public class OzonController {
         response.put("totalElements", productsPage.getTotalElements());
         return ResponseEntity.ok(response);
     }
-
     /**
      * Получить все товары пользователя
      */
@@ -477,43 +452,19 @@ public class OzonController {
         companyService.checkAccess(userEmail, companyOwnerId);
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<OzonProduct> productsPage;
+        String searchTerm = (search != null) ? search.trim() : "";
 
-        // Если есть поиск и сортировка
-        if (search != null && !search.trim().isEmpty() && sortBy != null && !sortBy.trim().isEmpty()) {
-            productsPage = productRepository.searchProductsWithSort(
-                    companyOwnerId,
-                    search.trim(),
-                    sortBy,
-                    sortDirection.toUpperCase(),
-                    pageable
-            );
-            log.info("Поиск '{}' с сортировкой по {} ({}) для пользователя {}",
-                    search, sortBy, sortDirection, companyOwnerId);
-        }
-        // Только поиск без сортировки
-        else if (search != null && !search.trim().isEmpty()) {
-            productsPage = productRepository.searchProducts(companyOwnerId, search.trim(), pageable);
-            log.info("Поиск '{}' для пользователя {}", search, companyOwnerId);
-        }
-        // Только сортировка без поиска
-        else if (sortBy != null && !sortBy.trim().isEmpty()) {
-            productsPage = productRepository.searchProductsWithSort(
-                    companyOwnerId,
-                    "",
-                    sortBy,
-                    sortDirection.toUpperCase(),
-                    pageable
-            );
-            log.info("Сортировка по {} ({}) для пользователя {}", sortBy, sortDirection, companyOwnerId);
-        }
-        // Без поиска и сортировки
-        else {
-            productsPage = productRepository.findByUserIdOrderByUpdatedAtDesc(companyOwnerId, pageable);
-            log.info("Получение всех товаров для пользователя {}", companyOwnerId);
-        }
+        Page<OzonProduct> productsPage = productRepository.searchProducts(companyOwnerId, searchTerm, pageable);
+        log.info("Получение всех товаров для пользователя {} с поиском '{}'", companyOwnerId, searchTerm);
 
-        List<ProductFrontendResponse> responses = productsPage.getContent().stream()
+        List<OzonProduct> content = productsPage.getContent();
+        String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
+        String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
+        sortProducts(content, effectiveSortBy, effectiveSortDirection);
+
+        productsPage = new PageImpl<>(content, pageable, productsPage.getTotalElements());
+
+        List<ProductFrontendResponse> responses = content.stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
 
@@ -532,6 +483,8 @@ public class OzonController {
     public ResponseEntity<Map<String, Object>> getProductsBySize(
             @RequestParam Long companyOwnerId,
             @RequestParam String size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             Authentication auth) {
@@ -543,7 +496,14 @@ public class OzonController {
         Pageable pageable = PageRequest.of(page, pageSize);
         Page<OzonProduct> productsPage = productRepository.findByUserIdAndSize(companyOwnerId, size, pageable);
 
-        List<ProductFrontendResponse> responses = productsPage.getContent().stream()
+        List<OzonProduct> content = productsPage.getContent();
+        String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
+        String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
+        sortProducts(content, effectiveSortBy, effectiveSortDirection);
+
+        productsPage = new PageImpl<>(content, pageable, productsPage.getTotalElements());
+
+        List<ProductFrontendResponse> responses = content.stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
                 .collect(Collectors.toList());
 
@@ -553,5 +513,68 @@ public class OzonController {
         response.put("totalPages", productsPage.getTotalPages());
         response.put("totalElements", productsPage.getTotalElements());
         return ResponseEntity.ok(response);
+    }
+
+    private int calculateStock(OzonProduct product) {
+        Map<String, Object> stocksMap = parseJson(product.getStocks(), new TypeReference<Map<String, Object>>() {});
+        if (stocksMap == null || !stocksMap.containsKey("stocks")) {
+            return 0;
+        }
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> stocks = (List<Map<String, Object>>) stocksMap.get("stocks");
+        return stocks.stream()
+                .mapToInt(s -> s.containsKey("remaining") ? ((Number) s.get("remaining")).intValue() : 0)
+                .sum();
+    }
+    // В OzonController.java добавить приватный метод для получения первого barcode:
+    private String getFirstBarcode(OzonProduct product) {
+        List<String> barcodes = parseJson(product.getBarcodes(), new TypeReference<List<String>>() {});
+        return barcodes != null && !barcodes.isEmpty() ? barcodes.get(0) : "";
+    }
+
+    // В OzonController.java добавить приватный метод для получения первого tag:
+    private String getFirstTag(OzonProduct product) {
+        List<String> tags = parseJson(product.getTags(), new TypeReference<List<String>>() {});
+        return tags != null && !tags.isEmpty() ? tags.get(0) : "";
+    }
+
+    // В OzonController.java добавить приватный метод для сортировки списка продуктов:
+    private void sortProducts(List<OzonProduct> products, String sortBy, String sortDirection) {
+        Comparator<OzonProduct> comparator;
+        switch (sortBy) {
+            case "name":
+                comparator = Comparator.comparing(OzonProduct::getName, Comparator.nullsLast(Comparator.naturalOrder()));
+                break;
+            case "price":
+                comparator = Comparator.comparing(
+                        p -> p.getPrice() != null ? p.getPrice() : BigDecimal.ZERO,
+                        Comparator.nullsLast(BigDecimal::compareTo)
+                );
+                break;
+            case "sku":
+                comparator = Comparator.comparingLong(p -> p.getSku() != null ? p.getSku() : 0L);
+                break;
+            case "offerId":
+                comparator = Comparator.comparing(OzonProduct::getOfferId, Comparator.nullsLast(Comparator.naturalOrder()));
+                break;
+            case "stock":
+                comparator = Comparator.comparingInt(this::calculateStock);
+                break;
+            case "barcode":
+                comparator = Comparator.comparing(this::getFirstBarcode, Comparator.nullsLast(Comparator.naturalOrder()));
+                break;
+            case "tag":
+                comparator = Comparator.comparing(this::getFirstTag, Comparator.nullsLast(Comparator.naturalOrder()));
+                break;
+            case "updatedAt":
+                comparator = Comparator.comparing(OzonProduct::getUpdatedAt, Comparator.nullsLast(Comparator.naturalOrder()));
+                break;
+            default:
+                return; // Нет сортировки если неизвестный sortBy
+        }
+        if ("DESC".equalsIgnoreCase(sortDirection)) {
+            comparator = comparator.reversed();
+        }
+        products.sort(comparator);
     }
 }
