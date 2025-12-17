@@ -143,9 +143,9 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
         CASE WHEN :sortBy = 'size' AND :sortDirection = 'DESC' THEN p.size END DESC,
         
         -- Сортировка по количеству на складе (сумма remaining)
-        CASE WHEN :sortBy = 'stock' AND :sortDirection = 'ASC' 
-             THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
-                   FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
+        CASE WHEN :sortBy = 'stock' AND :sortDirection = 'ASC'
+                     THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0)
+                           FROM jsonb_array_elements(p.stocks->'stocks') AS s)
         END ASC,
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'DESC' 
              THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
@@ -154,18 +154,18 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
         
         -- Сортировка по первому баркоду
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'ASC' 
-             THEN (p.barcodes::jsonb -> 0) 
+             THEN (p.barcodes::jsonb ->> 0) 
         END ASC,
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'DESC' 
-             THEN (p.barcodes::jsonb -> 0) 
+             THEN (p.barcodes::jsonb ->> 0) 
         END DESC,
         
         -- Сортировка по первому тегу
         CASE WHEN :sortBy = 'tag' AND :sortDirection = 'ASC' 
-             THEN (p.tags::jsonb -> 0) 
+             THEN (p.tags::jsonb ->> 0) 
         END ASC,
         CASE WHEN :sortBy = 'tag' AND :sortDirection = 'DESC' 
-             THEN (p.tags::jsonb -> 0) 
+             THEN (p.tags::jsonb ->> 0) 
         END DESC
     """,
             countQuery = """
@@ -219,17 +219,17 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
         END DESC,
         
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'ASC' 
-             THEN (p.barcodes::jsonb -> 0) 
+             THEN (p.barcodes::jsonb ->> 0) 
         END ASC,
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'DESC' 
-             THEN (p.barcodes::jsonb -> 0) 
+             THEN (p.barcodes::jsonb ->> 0) 
         END DESC,
         
         CASE WHEN :sortBy = 'tag' AND :sortDirection = 'ASC' 
-             THEN (p.tags::jsonb -> 0) 
+             THEN (p.tags::jsonb ->> 0) 
         END ASC,
         CASE WHEN :sortBy = 'tag' AND :sortDirection = 'DESC' 
-             THEN (p.tags::jsonb -> 0) 
+             THEN (p.tags::jsonb ->> 0) 
         END DESC
     """,
             countQuery = """
