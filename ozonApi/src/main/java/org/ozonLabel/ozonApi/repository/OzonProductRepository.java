@@ -112,10 +112,6 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
                                              @Param("searchTerm") String searchTerm,
                                              Pageable pageable);
 
-    // Поиск с сортировкой
-    // В OzonProductRepository.java
-
-    // Универсальная сортировка по всем товарам
     @Query(value = """
     SELECT * FROM ozon_products p 
     WHERE p.user_id = :userId 
@@ -145,11 +141,11 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
         -- Сортировка по количеству на складе (сумма remaining)
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'ASC'
                      THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0)
-                           FROM jsonb_array_elements(p.stocks->'stocks') AS s)
+                           FROM jsonb_array_elements(p.stocks::jsonb->'stocks') AS s)
         END ASC,
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'DESC' 
              THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
-                   FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
+                   FROM jsonb_array_elements(p.stocks::jsonb->'stocks') AS s) 
         END DESC,
         
         -- Сортировка по первому баркоду
@@ -211,11 +207,11 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
         
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'ASC' 
              THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
-                   FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
+                   FROM jsonb_array_elements(p.stocks::jsonb->'stocks') AS s) 
         END ASC,
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'DESC' 
              THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
-                   FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
+                   FROM jsonb_array_elements(p.stocks::jsonb->'stocks') AS s) 
         END DESC,
         
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'ASC' 
