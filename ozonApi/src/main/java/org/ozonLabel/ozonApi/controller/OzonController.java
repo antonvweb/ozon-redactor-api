@@ -481,9 +481,6 @@ public class OzonController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Получить все товары пользователя
-     */
     @GetMapping("/products")
     public ResponseEntity<Map<String, Object>> getAllProducts(
             @RequestParam Long companyOwnerId,
