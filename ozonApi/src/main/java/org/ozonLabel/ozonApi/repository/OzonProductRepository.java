@@ -142,30 +142,30 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
         CASE WHEN :sortBy = 'size' AND :sortDirection = 'ASC' THEN p.size END ASC,
         CASE WHEN :sortBy = 'size' AND :sortDirection = 'DESC' THEN p.size END DESC,
         
-        -- Сортировка по количеству на складе (сумма remaining из stocks)
+        -- Сортировка по количеству на складе (сумма remaining)
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'ASC' 
-             THEN (SELECT COALESCE(SUM((s->>'remaining')::int), 0) 
+             THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
                    FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
         END ASC,
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'DESC' 
-             THEN (SELECT COALESCE(SUM((s->>'remaining')::int), 0) 
+             THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
                    FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
         END DESC,
         
-        -- Сортировка по первому баркоду (если нужно по всем — сложнее)
+        -- Сортировка по первому баркоду
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'ASC' 
-             THEN (p.barcodes::jsonb->0) 
-        END,
+             THEN (p.barcodes::jsonb -> 0) 
+        END ASC,
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'DESC' 
-             THEN (p.barcodes::jsonb->0) 
+             THEN (p.barcodes::jsonb -> 0) 
         END DESC,
         
-        -- Сортировка по первому тегу (алфавитно)
+        -- Сортировка по первому тегу
         CASE WHEN :sortBy = 'tag' AND :sortDirection = 'ASC' 
-             THEN (p.tags::jsonb->0) 
-        END,
+             THEN (p.tags::jsonb -> 0) 
+        END ASC,
         CASE WHEN :sortBy = 'tag' AND :sortDirection = 'DESC' 
-             THEN (p.tags::jsonb->0) 
+             THEN (p.tags::jsonb -> 0) 
         END DESC
     """,
             countQuery = """
@@ -187,7 +187,6 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
             @Param("sortDirection") String sortDirection,
             Pageable pageable);
 
-    // Поиск в папке с сортировкой
     @Query(value = """
     SELECT * FROM ozon_products p 
     WHERE p.user_id = :userId AND p.folder_id = :folderId
@@ -211,26 +210,26 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
         CASE WHEN :sortBy = 'size' AND :sortDirection = 'DESC' THEN p.size END DESC,
         
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'ASC' 
-             THEN (SELECT COALESCE(SUM((s->>'remaining')::int), 0) 
+             THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
                    FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
         END ASC,
         CASE WHEN :sortBy = 'stock' AND :sortDirection = 'DESC' 
-             THEN (SELECT COALESCE(SUM((s->>'remaining')::int), 0) 
+             THEN (SELECT COALESCE(SUM((s->>'remaining')::integer), 0) 
                    FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
         END DESC,
         
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'ASC' 
-             THEN (p.barcodes::jsonb->0) 
-        END,
+             THEN (p.barcodes::jsonb -> 0) 
+        END ASC,
         CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'DESC' 
-             THEN (p.barcodes::jsonb->0) 
+             THEN (p.barcodes::jsonb -> 0) 
         END DESC,
         
         CASE WHEN :sortBy = 'tag' AND :sortDirection = 'ASC' 
-             THEN (p.tags::jsonb->0) 
-        END,
+             THEN (p.tags::jsonb -> 0) 
+        END ASC,
         CASE WHEN :sortBy = 'tag' AND :sortDirection = 'DESC' 
-             THEN (p.tags::jsonb->0) 
+             THEN (p.tags::jsonb -> 0) 
         END DESC
     """,
             countQuery = """
