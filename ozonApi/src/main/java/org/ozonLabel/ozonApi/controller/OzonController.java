@@ -376,7 +376,7 @@ public class OzonController {
         Page<OzonProduct> productsPage = productRepository.searchProductsInFolder(companyOwnerId, folderId, searchTerm, pageable);
         log.info("Получение товаров из папки {} для пользователя {} с поиском '{}'", folderId, companyOwnerId, searchTerm);
 
-        List<OzonProduct> content = productsPage.getContent();
+        List<OzonProduct> content = new ArrayList<>(productsPage.getContent());
         String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
         String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
         sortProducts(content, effectiveSortBy, effectiveSortDirection);
@@ -417,7 +417,7 @@ public class OzonController {
         Page<OzonProduct> productsPage = productRepository.searchProductsWithoutFolder(companyOwnerId, searchTerm, pageable);
         log.info("Получение товаров без папки для пользователя {} с поиском '{}'", companyOwnerId, searchTerm);
 
-        List<OzonProduct> content = productsPage.getContent();
+        List<OzonProduct> content = new ArrayList<>(productsPage.getContent());
         String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
         String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
         sortProducts(content, effectiveSortBy, effectiveSortDirection);
@@ -457,7 +457,7 @@ public class OzonController {
         Page<OzonProduct> productsPage = productRepository.searchProducts(companyOwnerId, searchTerm, pageable);
         log.info("Получение всех товаров для пользователя {} с поиском '{}'", companyOwnerId, searchTerm);
 
-        List<OzonProduct> content = productsPage.getContent();
+        List<OzonProduct> content = new ArrayList<>(productsPage.getContent());
         String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
         String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
         sortProducts(content, effectiveSortBy, effectiveSortDirection);
@@ -496,7 +496,7 @@ public class OzonController {
         Pageable pageable = PageRequest.of(page, pageSize);
         Page<OzonProduct> productsPage = productRepository.findByUserIdAndSize(companyOwnerId, size, pageable);
 
-        List<OzonProduct> content = productsPage.getContent();
+        List<OzonProduct> content = new ArrayList<>(productsPage.getContent());
         String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
         String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
         sortProducts(content, effectiveSortBy, effectiveSortDirection);
