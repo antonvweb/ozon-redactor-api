@@ -113,63 +113,145 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
                                              Pageable pageable);
 
     // Поиск с сортировкой
-    @Query(value = "SELECT * FROM ozon_products p WHERE p.user_id = :userId AND " +
-            "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-            "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-            "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-            "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%'))) " +
-            "ORDER BY " +
-            "CASE WHEN :sortBy = 'name' AND :sortDirection = 'ASC' THEN p.name END ASC, " +
-            "CASE WHEN :sortBy = 'name' AND :sortDirection = 'DESC' THEN p.name END DESC, " +
-            "CASE WHEN :sortBy = 'price' AND :sortDirection = 'ASC' THEN p.price END ASC, " +
-            "CASE WHEN :sortBy = 'price' AND :sortDirection = 'DESC' THEN p.price END DESC, " +
-            "CASE WHEN :sortBy = 'sku' AND :sortDirection = 'ASC' THEN p.sku END ASC, " +
-            "CASE WHEN :sortBy = 'sku' AND :sortDirection = 'DESC' THEN p.sku END DESC, " +
-            "CASE WHEN :sortBy = 'offerId' AND :sortDirection = 'ASC' THEN p.offer_id END ASC, " +
-            "CASE WHEN :sortBy = 'offerId' AND :sortDirection = 'DESC' THEN p.offer_id END DESC, " +
-            "CASE WHEN :sortBy = 'size' AND :sortDirection = 'ASC' THEN p.size END ASC, " +
-            "CASE WHEN :sortBy = 'size' AND :sortDirection = 'DESC' THEN p.size END DESC",
-            countQuery = "SELECT COUNT(*) FROM ozon_products p WHERE p.user_id = :userId AND " +
-                    "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-                    "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-                    "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-                    "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')))",
+    // В OzonProductRepository.java
+
+    // Универсальная сортировка по всем товарам
+    @Query(value = """
+    SELECT * FROM ozon_products p 
+    WHERE p.user_id = :userId 
+    AND (
+        LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR 
+        LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR 
+        CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR 
+        LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR
+        LOWER(CAST(p.barcodes AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+    )
+    ORDER BY
+        CASE WHEN :sortBy = 'name' AND :sortDirection = 'ASC' THEN p.name END ASC,
+        CASE WHEN :sortBy = 'name' AND :sortDirection = 'DESC' THEN p.name END DESC,
+        
+        CASE WHEN :sortBy = 'price' AND :sortDirection = 'ASC' THEN p.price END ASC,
+        CASE WHEN :sortBy = 'price' AND :sortDirection = 'DESC' THEN p.price END DESC,
+        
+        CASE WHEN :sortBy = 'sku' AND :sortDirection = 'ASC' THEN p.sku END ASC,
+        CASE WHEN :sortBy = 'sku' AND :sortDirection = 'DESC' THEN p.sku END DESC,
+        
+        CASE WHEN :sortBy = 'offerId' AND :sortDirection = 'ASC' THEN p.offer_id END ASC,
+        CASE WHEN :sortBy = 'offerId' AND :sortDirection = 'DESC' THEN p.offer_id END DESC,
+        
+        CASE WHEN :sortBy = 'size' AND :sortDirection = 'ASC' THEN p.size END ASC,
+        CASE WHEN :sortBy = 'size' AND :sortDirection = 'DESC' THEN p.size END DESC,
+        
+        -- Сортировка по количеству на складе (сумма remaining из stocks)
+        CASE WHEN :sortBy = 'stock' AND :sortDirection = 'ASC' 
+             THEN (SELECT COALESCE(SUM((s->>'remaining')::int), 0) 
+                   FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
+        END ASC,
+        CASE WHEN :sortBy = 'stock' AND :sortDirection = 'DESC' 
+             THEN (SELECT COALESCE(SUM((s->>'remaining')::int), 0) 
+                   FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
+        END DESC,
+        
+        -- Сортировка по первому баркоду (если нужно по всем — сложнее)
+        CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'ASC' 
+             THEN (p.barcodes::jsonb->0) 
+        END,
+        CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'DESC' 
+             THEN (p.barcodes::jsonb->0) 
+        END DESC,
+        
+        -- Сортировка по первому тегу (алфавитно)
+        CASE WHEN :sortBy = 'tag' AND :sortDirection = 'ASC' 
+             THEN (p.tags::jsonb->0) 
+        END,
+        CASE WHEN :sortBy = 'tag' AND :sortDirection = 'DESC' 
+             THEN (p.tags::jsonb->0) 
+        END DESC
+    """,
+            countQuery = """
+    SELECT COUNT(*) FROM ozon_products p 
+    WHERE p.user_id = :userId 
+    AND (
+        LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR 
+        LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR 
+        CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR 
+        LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR
+        LOWER(CAST(p.barcodes AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+    )
+    """,
             nativeQuery = true)
-    Page<OzonProduct> searchProductsWithSort(@Param("userId") Long userId,
-                                             @Param("searchTerm") String searchTerm,
-                                             @Param("sortBy") String sortBy,
-                                             @Param("sortDirection") String sortDirection,
-                                             Pageable pageable);
+    Page<OzonProduct> searchProductsWithSort(
+            @Param("userId") Long userId,
+            @Param("searchTerm") String searchTerm,
+            @Param("sortBy") String sortBy,
+            @Param("sortDirection") String sortDirection,
+            Pageable pageable);
 
     // Поиск в папке с сортировкой
-    @Query(value = "SELECT * FROM ozon_products p WHERE p.user_id = :userId AND p.folder_id = :folderId AND " +
-            "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-            "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-            "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-            "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%'))) " +
-            "ORDER BY " +
-            "CASE WHEN :sortBy = 'name' AND :sortDirection = 'ASC' THEN p.name END ASC, " +
-            "CASE WHEN :sortBy = 'name' AND :sortDirection = 'DESC' THEN p.name END DESC, " +
-            "CASE WHEN :sortBy = 'price' AND :sortDirection = 'ASC' THEN p.price END ASC, " +
-            "CASE WHEN :sortBy = 'price' AND :sortDirection = 'DESC' THEN p.price END DESC, " +
-            "CASE WHEN :sortBy = 'sku' AND :sortDirection = 'ASC' THEN p.sku END ASC, " +
-            "CASE WHEN :sortBy = 'sku' AND :sortDirection = 'DESC' THEN p.sku END DESC, " +
-            "CASE WHEN :sortBy = 'offerId' AND :sortDirection = 'ASC' THEN p.offer_id END ASC, " +
-            "CASE WHEN :sortBy = 'offerId' AND :sortDirection = 'DESC' THEN p.offer_id END DESC, " +
-            "CASE WHEN :sortBy = 'size' AND :sortDirection = 'ASC' THEN p.size END ASC, " +
-            "CASE WHEN :sortBy = 'size' AND :sortDirection = 'DESC' THEN p.size END DESC",
-            countQuery = "SELECT COUNT(*) FROM ozon_products p WHERE p.user_id = :userId AND p.folder_id = :folderId AND " +
-                    "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-                    "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-                    "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-                    "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')))",
+    @Query(value = """
+    SELECT * FROM ozon_products p 
+    WHERE p.user_id = :userId AND p.folder_id = :folderId
+    AND (
+        LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR 
+        LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR 
+        CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR 
+        LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR
+        LOWER(CAST(p.barcodes AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+    )
+    ORDER BY
+        CASE WHEN :sortBy = 'name' AND :sortDirection = 'ASC' THEN p.name END ASC,
+        CASE WHEN :sortBy = 'name' AND :sortDirection = 'DESC' THEN p.name END DESC,
+        CASE WHEN :sortBy = 'price' AND :sortDirection = 'ASC' THEN p.price END ASC,
+        CASE WHEN :sortBy = 'price' AND :sortDirection = 'DESC' THEN p.price END DESC,
+        CASE WHEN :sortBy = 'sku' AND :sortDirection = 'ASC' THEN p.sku END ASC,
+        CASE WHEN :sortBy = 'sku' AND :sortDirection = 'DESC' THEN p.sku END DESC,
+        CASE WHEN :sortBy = 'offerId' AND :sortDirection = 'ASC' THEN p.offer_id END ASC,
+        CASE WHEN :sortBy = 'offerId' AND :sortDirection = 'DESC' THEN p.offer_id END DESC,
+        CASE WHEN :sortBy = 'size' AND :sortDirection = 'ASC' THEN p.size END ASC,
+        CASE WHEN :sortBy = 'size' AND :sortDirection = 'DESC' THEN p.size END DESC,
+        
+        CASE WHEN :sortBy = 'stock' AND :sortDirection = 'ASC' 
+             THEN (SELECT COALESCE(SUM((s->>'remaining')::int), 0) 
+                   FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
+        END ASC,
+        CASE WHEN :sortBy = 'stock' AND :sortDirection = 'DESC' 
+             THEN (SELECT COALESCE(SUM((s->>'remaining')::int), 0) 
+                   FROM jsonb_array_elements(p.stocks->'stocks') AS s) 
+        END DESC,
+        
+        CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'ASC' 
+             THEN (p.barcodes::jsonb->0) 
+        END,
+        CASE WHEN :sortBy = 'barcode' AND :sortDirection = 'DESC' 
+             THEN (p.barcodes::jsonb->0) 
+        END DESC,
+        
+        CASE WHEN :sortBy = 'tag' AND :sortDirection = 'ASC' 
+             THEN (p.tags::jsonb->0) 
+        END,
+        CASE WHEN :sortBy = 'tag' AND :sortDirection = 'DESC' 
+             THEN (p.tags::jsonb->0) 
+        END DESC
+    """,
+            countQuery = """
+    SELECT COUNT(*) FROM ozon_products p 
+    WHERE p.user_id = :userId AND p.folder_id = :folderId
+    AND (
+        LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR 
+        LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR 
+        CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR 
+        LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR
+        LOWER(CAST(p.barcodes AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+    )
+    """,
             nativeQuery = true)
-    Page<OzonProduct> searchProductsInFolderWithSort(@Param("userId") Long userId,
-                                                     @Param("folderId") Long folderId,
-                                                     @Param("searchTerm") String searchTerm,
-                                                     @Param("sortBy") String sortBy,
-                                                     @Param("sortDirection") String sortDirection,
-                                                     Pageable pageable);
+    Page<OzonProduct> searchProductsInFolderWithSort(
+            @Param("userId") Long userId,
+            @Param("folderId") Long folderId,
+            @Param("searchTerm") String searchTerm,
+            @Param("sortBy") String sortBy,
+            @Param("sortDirection") String sortDirection,
+            Pageable pageable);
 
     // Поиск товаров без папки
     @Query(value = "SELECT * FROM ozon_products p WHERE p.user_id = :userId AND p.folder_id IS NULL AND " +
