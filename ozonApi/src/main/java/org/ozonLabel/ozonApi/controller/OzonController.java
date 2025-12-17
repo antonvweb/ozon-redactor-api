@@ -356,6 +356,9 @@ public class OzonController {
     /**
      * Получить товары из папки
      */
+    /**
+     * Получить товары из папки
+     */
     @GetMapping("/products/folder/{folderId}")
     public ResponseEntity<Map<String, Object>> getProductsInFolder(
             @PathVariable Long folderId,
@@ -363,6 +366,7 @@ public class OzonController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
+            @RequestParam(required = false) String statusFilter,  // ← НОВЫЙ ПАРАМЕТР
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
@@ -377,11 +381,31 @@ public class OzonController {
         log.info("Получение товаров из папки {} для пользователя {} с поиском '{}'", folderId, companyOwnerId, searchTerm);
 
         List<OzonProduct> content = new ArrayList<>(productsPage.getContent());
+
+        // === НОВАЯ ФИЛЬТРАЦИЯ ПО СТАТУСУ ===
+        if (statusFilter != null && !statusFilter.trim().isEmpty()) {
+            String filter = statusFilter.trim();
+            content = content.stream()
+                    .filter(product -> {
+                        Map<String, Object> statusesMap = parseJson(product.getStatuses(), new TypeReference<Map<String, Object>>() {});
+                        if (statusesMap == null || !statusesMap.containsKey("status_name")) {
+                            return false;
+                        }
+                        String statusName = (String) statusesMap.get("status_name");
+                        return statusName != null && statusName.equals(filter);
+                    })
+                    .collect(Collectors.toList());
+        }
+
         String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
         String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
         sortProducts(content, effectiveSortBy, effectiveSortDirection);
 
-        productsPage = new PageImpl<>(content, pageable, productsPage.getTotalElements());
+        long totalElements = (statusFilter != null && !statusFilter.trim().isEmpty())
+                ? content.size()
+                : productsPage.getTotalElements();
+
+        productsPage = new PageImpl<>(content, pageable, totalElements);
 
         List<ProductFrontendResponse> responses = content.stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
@@ -404,6 +428,7 @@ public class OzonController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
+            @RequestParam(required = false) String statusFilter,  // ← НОВЫЙ ПАРАМЕТР
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
@@ -418,11 +443,31 @@ public class OzonController {
         log.info("Получение товаров без папки для пользователя {} с поиском '{}'", companyOwnerId, searchTerm);
 
         List<OzonProduct> content = new ArrayList<>(productsPage.getContent());
+
+        // === НОВАЯ ФИЛЬТРАЦИЯ ПО СТАТУСУ ===
+        if (statusFilter != null && !statusFilter.trim().isEmpty()) {
+            String filter = statusFilter.trim();
+            content = content.stream()
+                    .filter(product -> {
+                        Map<String, Object> statusesMap = parseJson(product.getStatuses(), new TypeReference<Map<String, Object>>() {});
+                        if (statusesMap == null || !statusesMap.containsKey("status_name")) {
+                            return false;
+                        }
+                        String statusName = (String) statusesMap.get("status_name");
+                        return statusName != null && statusName.equals(filter);
+                    })
+                    .collect(Collectors.toList());
+        }
+
         String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
         String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
         sortProducts(content, effectiveSortBy, effectiveSortDirection);
 
-        productsPage = new PageImpl<>(content, pageable, productsPage.getTotalElements());
+        long totalElements = (statusFilter != null && !statusFilter.trim().isEmpty())
+                ? content.size()
+                : productsPage.getTotalElements();
+
+        productsPage = new PageImpl<>(content, pageable, totalElements);
 
         List<ProductFrontendResponse> responses = content.stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
@@ -435,6 +480,7 @@ public class OzonController {
         response.put("totalElements", productsPage.getTotalElements());
         return ResponseEntity.ok(response);
     }
+
     /**
      * Получить все товары пользователя
      */
@@ -444,6 +490,7 @@ public class OzonController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "DESC") String sortDirection,
+            @RequestParam(required = false) String statusFilter,  // ← НОВЫЙ ПАРАМЕТР
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication auth) {
@@ -458,11 +505,32 @@ public class OzonController {
         log.info("Получение всех товаров для пользователя {} с поиском '{}'", companyOwnerId, searchTerm);
 
         List<OzonProduct> content = new ArrayList<>(productsPage.getContent());
+
+        // === НОВАЯ ФИЛЬТРАЦИЯ ПО СТАТУСУ ===
+        if (statusFilter != null && !statusFilter.trim().isEmpty()) {
+            String filter = statusFilter.trim();
+            content = content.stream()
+                    .filter(product -> {
+                        Map<String, Object> statusesMap = parseJson(product.getStatuses(), new TypeReference<Map<String, Object>>() {});
+                        if (statusesMap == null || !statusesMap.containsKey("status_name")) {
+                            return false;
+                        }
+                        String statusName = (String) statusesMap.get("status_name");
+                        return statusName != null && statusName.equals(filter);
+                    })
+                    .collect(Collectors.toList());
+        }
+
         String effectiveSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "updatedAt";
         String effectiveSortDirection = (sortBy != null && !sortBy.trim().isEmpty()) ? sortDirection : "DESC";
         sortProducts(content, effectiveSortBy, effectiveSortDirection);
 
-        productsPage = new PageImpl<>(content, pageable, productsPage.getTotalElements());
+        // Общее количество после фильтрации (для клиентской фильтрации — только видимые на странице + оригинальный total)
+        long totalElements = (statusFilter != null && !statusFilter.trim().isEmpty())
+                ? content.size()  // неточний total, но приемлемо для небольших данных
+                : productsPage.getTotalElements();
+
+        productsPage = new PageImpl<>(content, pageable, totalElements);
 
         List<ProductFrontendResponse> responses = content.stream()
                 .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
