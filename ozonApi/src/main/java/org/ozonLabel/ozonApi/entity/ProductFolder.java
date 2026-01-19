@@ -47,7 +47,6 @@ public class ProductFolder {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // Связь с родительской папкой
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_folder_id", insertable = false, updatable = false)
     private ProductFolder parentFolder;

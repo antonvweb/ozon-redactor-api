@@ -15,7 +15,6 @@ import java.util.List;
 @Repository
 public interface CompanyAuditLogRepository extends JpaRepository<CompanyAuditLog, Long> {
 
-    // Получить историю действий компании с пагинацией
     Page<CompanyAuditLog> findByCompanyOwnerIdOrderByCreatedAtDesc(Long companyOwnerId, Pageable pageable);
 
     // Получить историю действий конкретного пользователя в компании
