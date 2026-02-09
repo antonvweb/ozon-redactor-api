@@ -61,7 +61,7 @@ public class ProductCreationServiceIml implements ProductCreationService {
 
         ProductInfo productInfo = mapToProductInfo(product);
 
-// Сохраняем через OzonService
+
         ProductInfo savedProductInfo = ozonService.saveProduct(productInfo);
         log.info("сохраненный ProductInfo '{}', product -  {} productInfo -  {}",
                 dto.getSize(), productId, userEmail);

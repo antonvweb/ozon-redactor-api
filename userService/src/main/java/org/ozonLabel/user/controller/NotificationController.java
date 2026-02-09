@@ -24,9 +24,6 @@ public class NotificationController {
 
     private final NotificationService notificationService;
 
-    /**
-     * Получить все уведомления пользователя
-     */
     @GetMapping
     public ResponseEntity<NotificationListResponseDto> getNotifications(
             @RequestParam(defaultValue = "0") int page,
