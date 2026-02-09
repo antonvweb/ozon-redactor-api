@@ -13,14 +13,15 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class LabelResponseDto {
-
     private Long id;
     private Long userId;
+    private Long companyId;
     private Long productId;
     private String name;
-    private LabelConfigDto config;
     private BigDecimal width;
     private BigDecimal height;
+    private String unit;
+    private LabelConfigDto config;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

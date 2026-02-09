@@ -1,6 +1,5 @@
 package org.ozonLabel.ozonApi.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,7 +17,6 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Label {
 
     @Id
@@ -28,26 +26,32 @@ public class Label {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     @Column(name = "product_id", nullable = false)
     private Long productId;
 
-    @Column(name = "name")
     private String name;
 
-    @Column(name = "config", columnDefinition = "jsonb", nullable = false)
-    @JdbcTypeCode(SqlTypes.JSON)
-    private String config;
-
-    @Column(name = "width", nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal width;
 
-    @Column(name = "height", nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal height;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(nullable = false)
+    @Builder.Default
+    private String unit = "mm";
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    private String config;
+
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     @PrePersist

@@ -9,20 +9,18 @@ import org.ozonLabel.common.dto.label.LabelConfigDto;
 import org.ozonLabel.common.dto.label.LabelResponseDto;
 import org.ozonLabel.common.dto.label.UpdateLabelDto;
 import org.ozonLabel.common.dto.user.UserResponseDto;
+import org.ozonLabel.common.exception.ozon.UserNotFoundException;
+import org.ozonLabel.common.exception.user.ConflictException;
+import org.ozonLabel.common.exception.user.ResourceNotFoundException;
 import org.ozonLabel.common.service.label.LabelService;
+import org.ozonLabel.common.service.user.CompanyService;
 import org.ozonLabel.common.service.user.UserService;
 import org.ozonLabel.ozonApi.entity.Label;
+import org.ozonLabel.ozonApi.mapper.LabelMapper;
 import org.ozonLabel.ozonApi.repository.LabelRepository;
-import org.ozonLabel.ozonApi.repository.OzonProductRepository;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.ozonLabel.ozonApi.validation.LabelValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,175 +28,133 @@ import java.util.stream.Collectors;
 public class LabelServiceImpl implements LabelService {
 
     private final LabelRepository labelRepository;
-    private final OzonProductRepository productRepository;
-    private final UserService userService;
+    private final LabelMapper labelMapper;
+    private final LabelValidator labelValidator;
     private final ObjectMapper objectMapper;
+    private final CompanyService companyService;
+    private final UserService userService;
 
     @Override
     @Transactional
-    public LabelResponseDto createLabel(String userEmail, CreateLabelDto dto) {
-        UserResponseDto user = getUserByEmail(userEmail);
+    public LabelResponseDto createLabel(String userEmail, Long companyOwnerId, CreateLabelDto dto) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+        Long userId = getUserIdByEmail(userEmail);
 
-        // Проверяем существование товара
-        validateProductExists(user.getId(), dto.getProductId());
+        labelValidator.validate(dto.getConfig());
 
-        // Проверяем, нет ли уже этикетки для этого товара
-        if (labelRepository.existsByUserIdAndProductId(user.getId(), dto.getProductId())) {
-            throw new IllegalArgumentException("Этикетка для этого товара уже существует");
+        if (labelRepository.existsByCompanyIdAndProductId(companyOwnerId, dto.getProductId())) {
+            throw new ConflictException("Этикетка для этого продукта уже существует");
         }
 
         Label label = Label.builder()
-                .userId(user.getId())
+                .userId(userId)
+                .companyId(companyOwnerId)
                 .productId(dto.getProductId())
                 .name(dto.getName())
-                .config(serializeConfig(dto.getConfig()))
-                .width(dto.getWidth() != null ? dto.getWidth() : new BigDecimal("58.00"))
-                .height(dto.getHeight() != null ? dto.getHeight() : new BigDecimal("40.00"))
+                .width(dto.getConfig().getWidth())
+                .height(dto.getConfig().getHeight())
+                .unit(dto.getConfig().getUnit() != null ? dto.getConfig().getUnit() : "mm")
+                .config(toJson(dto.getConfig()))
                 .build();
 
         Label saved = labelRepository.save(label);
+        log.info("Создана этикетка id={} для productId={} пользователем {}", saved.getId(), dto.getProductId(), userEmail);
+        return labelMapper.toDto(saved);
+    }
 
-        log.info("Создана этикетка {} для товара {} пользователя {}",
-                saved.getId(), dto.getProductId(), userEmail);
+    @Override
+    @Transactional(readOnly = true)
+    public LabelResponseDto getLabel(String userEmail, Long companyOwnerId, Long id) {
+        companyService.checkAccess(userEmail, companyOwnerId);
 
-        return mapToResponseDto(saved);
+        Label label = labelRepository.findByIdAndCompanyId(id, companyOwnerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Этикетка с id=" + id));
+        return labelMapper.toDto(label);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public LabelResponseDto getLabelByProductId(String userEmail, Long companyOwnerId, Long productId) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        Label label = labelRepository.findByCompanyIdAndProductId(companyOwnerId, productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Этикетка для продукта с id=" + productId));
+        return labelMapper.toDto(label);
     }
 
     @Override
     @Transactional
-    public LabelResponseDto updateLabel(String userEmail, Long productId, UpdateLabelDto dto) {
-        UserResponseDto user = getUserByEmail(userEmail);
+    public LabelResponseDto updateLabel(String userEmail, Long companyOwnerId, Long id, UpdateLabelDto dto) {
+        companyService.checkAccess(userEmail, companyOwnerId);
 
-        Label label = labelRepository.findByUserIdAndProductId(user.getId(), productId)
-                .orElseThrow(() -> new IllegalArgumentException("Этикетка не найдена"));
+        Label label = labelRepository.findByIdAndCompanyId(id, companyOwnerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Этикетка с id=" + id));
 
-        if (dto.getName() != null) {
-            label.setName(dto.getName());
-        }
+        labelValidator.validate(dto.getConfig());
 
-        if (dto.getConfig() != null) {
-            label.setConfig(serializeConfig(dto.getConfig()));
-        }
+        label.setName(dto.getName());
+        label.setWidth(dto.getConfig().getWidth());
+        label.setHeight(dto.getConfig().getHeight());
+        label.setConfig(toJson(dto.getConfig()));
 
-        if (dto.getWidth() != null) {
-            label.setWidth(dto.getWidth());
-        }
-
-        if (dto.getHeight() != null) {
-            label.setHeight(dto.getHeight());
-        }
-
-        Label updated = labelRepository.save(label);
-
-        log.info("Обновлена этикетка {} для товара {} пользователя {}",
-                updated.getId(), productId, userEmail);
-
-        return mapToResponseDto(updated);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Optional<LabelResponseDto> getLabelByProductId(String userEmail, Long productId) {
-        UserResponseDto user = getUserByEmail(userEmail);
-
-        return labelRepository.findByUserIdAndProductId(user.getId(), productId)
-                .map(this::mapToResponseDto);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<LabelResponseDto> getAllLabels(String userEmail) {
-        UserResponseDto user = getUserByEmail(userEmail);
-
-        return labelRepository.findByUserIdOrderByUpdatedAtDesc(user.getId())
-                .stream()
-                .map(this::mapToResponseDto)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Page<LabelResponseDto> getAllLabels(String userEmail, Pageable pageable) {
-        UserResponseDto user = getUserByEmail(userEmail);
-
-        return labelRepository.findByUserId(user.getId(), pageable)
-                .map(this::mapToResponseDto);
+        Label saved = labelRepository.save(label);
+        log.info("Обновлена этикетка id={} пользователем {}", saved.getId(), userEmail);
+        return labelMapper.toDto(saved);
     }
 
     @Override
     @Transactional
-    public void deleteLabel(String userEmail, Long productId) {
-        UserResponseDto user = getUserByEmail(userEmail);
+    public void deleteLabel(String userEmail, Long companyOwnerId, Long id) {
+        companyService.checkAccess(userEmail, companyOwnerId);
 
-        if (!labelRepository.existsByUserIdAndProductId(user.getId(), productId)) {
-            throw new IllegalArgumentException("Этикетка не найдена");
-        }
+        Label label = labelRepository.findByIdAndCompanyId(id, companyOwnerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Этикетка с id=" + id));
 
-        labelRepository.deleteByUserIdAndProductId(user.getId(), productId);
-
-        log.info("Удалена этикетка для товара {} пользователя {}", productId, userEmail);
+        labelRepository.delete(label);
+        log.info("Удалена этикетка id={} пользователем {}", id, userEmail);
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public boolean existsLabel(String userEmail, Long productId) {
-        UserResponseDto user = getUserByEmail(userEmail);
-        return labelRepository.existsByUserIdAndProductId(user.getId(), productId);
-    }
+    @Transactional
+    public LabelResponseDto duplicateLabel(String userEmail, Long companyOwnerId, Long id, Long targetProductId) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+        Long userId = getUserIdByEmail(userEmail);
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<LabelResponseDto> searchLabelsByName(String userEmail, String name) {
-        UserResponseDto user = getUserByEmail(userEmail);
+        Label sourceLabel = labelRepository.findByIdAndCompanyId(id, companyOwnerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Этикетка с id=" + id));
 
-        return labelRepository.searchByName(user.getId(), name)
-                .stream()
-                .map(this::mapToResponseDto)
-                .collect(Collectors.toList());
-    }
-
-    // === Helper методы ===
-
-    private UserResponseDto getUserByEmail(String email) {
-        return userService.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
-    }
-
-    private void validateProductExists(Long userId, Long productId) {
-        if (!productRepository.existsByUserIdAndProductId(userId, productId)) {
-            throw new IllegalArgumentException("Товар не найден");
+        if (labelRepository.existsByCompanyIdAndProductId(companyOwnerId, targetProductId)) {
+            throw new ConflictException("Этикетка для целевого продукта уже существует");
         }
+
+        Label newLabel = Label.builder()
+                .userId(userId)
+                .companyId(companyOwnerId)
+                .productId(targetProductId)
+                .name(sourceLabel.getName())
+                .width(sourceLabel.getWidth())
+                .height(sourceLabel.getHeight())
+                .unit(sourceLabel.getUnit())
+                .config(sourceLabel.getConfig())
+                .build();
+
+        Label saved = labelRepository.save(newLabel);
+        log.info("Дублирована этикетка id={} в новую id={} для productId={} пользователем {}",
+                id, saved.getId(), targetProductId, userEmail);
+        return labelMapper.toDto(saved);
     }
 
-    private String serializeConfig(LabelConfigDto config) {
+    private Long getUserIdByEmail(String email) {
+        UserResponseDto user = userService.findByEmail(email)
+                .orElseThrow(() -> new UserNotFoundException("Пользователь с email " + email + " не найден"));
+        return user.getId();
+    }
+
+    private String toJson(LabelConfigDto config) {
         try {
             return objectMapper.writeValueAsString(config);
         } catch (JsonProcessingException e) {
-            log.error("Ошибка сериализации конфигурации этикетки", e);
-            throw new RuntimeException("Ошибка обработки конфигурации этикетки", e);
+            throw new RuntimeException("Ошибка сериализации конфигурации этикетки", e);
         }
-    }
-
-    private LabelConfigDto deserializeConfig(String configJson) {
-        try {
-            return objectMapper.readValue(configJson, LabelConfigDto.class);
-        } catch (JsonProcessingException e) {
-            log.error("Ошибка десериализации конфигурации этикетки", e);
-            throw new RuntimeException("Ошибка обработки конфигурации этикетки", e);
-        }
-    }
-
-    private LabelResponseDto mapToResponseDto(Label label) {
-        return LabelResponseDto.builder()
-                .id(label.getId())
-                .userId(label.getUserId())
-                .productId(label.getProductId())
-                .name(label.getName())
-                .config(deserializeConfig(label.getConfig()))
-                .width(label.getWidth())
-                .height(label.getHeight())
-                .createdAt(label.getCreatedAt())
-                .updatedAt(label.getUpdatedAt())
-                .build();
     }
 }

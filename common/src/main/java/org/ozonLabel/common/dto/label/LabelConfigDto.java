@@ -1,5 +1,8 @@
 package org.ozonLabel.common.dto.label;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,58 +16,20 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class LabelConfigDto {
-
+    @NotNull(message = "Ширина обязательна")
     private BigDecimal width;
+
+    @NotNull(message = "Высота обязательна")
     private BigDecimal height;
-    private String unit; // "mm", "px"
+
+    @Builder.Default
+    private String unit = "mm";
+
+    @NotEmpty(message = "Должен быть хотя бы один слой")
+    @Valid
     private List<LayerDto> layers;
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class LayerDto {
-        private String id;
-        private String name;
-        private Boolean locked;
-        private Boolean visible;
-        private Integer zIndex;
-        private List<ElementDto> elements;
-    }
-
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class ElementDto {
-        private String id;
-        private String type; // "text", "barcode", "qrcode", "image", "date", "background"
-        private BigDecimal x;
-        private BigDecimal y;
-        private BigDecimal width;
-        private BigDecimal height;
-        private BigDecimal rotation;
-
-        // Для текста
-        private String content;
-        private String fontFamily;
-        private Integer fontSize;
-        private String fontWeight;
-        private String color;
-        private String textAlign;
-
-        // Для баркода/QR
-        private String value;
-        private String format; // "EAN13", "CODE128", "QR"
-
-        // Для изображения
-        private String imageUrl;
-        private String imageBase64;
-
-        // Для даты
-        private String dateFormat;
-
-        // Для фона
-        private String backgroundColor;
-    }
+    @NotNull(message = "Список элементов обязателен")
+    @Valid
+    private List<ElementDto> elements;
 }
