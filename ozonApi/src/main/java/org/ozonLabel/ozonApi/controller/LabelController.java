@@ -13,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/labels")
 @RequiredArgsConstructor
@@ -103,5 +105,19 @@ public class LabelController {
 
         LabelResponseDto response = labelService.duplicateLabel(userEmail, companyOwnerId, id, targetProductId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/batch")
+    public ResponseEntity<List<LabelResponseDto>> getLabelsByProductIds(
+            @RequestParam Long companyOwnerId,
+            @RequestBody List<Long> productIds,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Batch получение этикеток для {} продуктов компании {} пользователем {}",
+                productIds.size(), companyOwnerId, userEmail);
+
+        List<LabelResponseDto> response = labelService.getLabelsByProductIds(userEmail, companyOwnerId, productIds);
+        return ResponseEntity.ok(response);
     }
 }

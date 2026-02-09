@@ -8,6 +8,8 @@ import org.ozonLabel.common.dto.label.CreateLabelDto;
 import org.ozonLabel.common.dto.label.LabelConfigDto;
 import org.ozonLabel.common.dto.label.LabelResponseDto;
 import org.ozonLabel.common.dto.label.UpdateLabelDto;
+
+import java.util.List;
 import org.ozonLabel.common.dto.user.UserResponseDto;
 import org.ozonLabel.common.exception.ozon.UserNotFoundException;
 import org.ozonLabel.common.exception.user.ConflictException;
@@ -142,6 +144,19 @@ public class LabelServiceImpl implements LabelService {
         log.info("Дублирована этикетка id={} в новую id={} для productId={} пользователем {}",
                 id, saved.getId(), targetProductId, userEmail);
         return labelMapper.toDto(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LabelResponseDto> getLabelsByProductIds(String userEmail, Long companyOwnerId, List<Long> productIds) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        List<Label> labels = labelRepository.findByCompanyIdAndProductIdIn(companyOwnerId, productIds);
+        log.info("Получено {} этикеток для {} продуктов компании {} пользователем {}",
+                labels.size(), productIds.size(), companyOwnerId, userEmail);
+        return labels.stream()
+                .map(labelMapper::toDto)
+                .toList();
     }
 
     private Long getUserIdByEmail(String email) {

@@ -4,6 +4,8 @@ import org.ozonLabel.common.dto.label.CreateLabelDto;
 import org.ozonLabel.common.dto.label.LabelResponseDto;
 import org.ozonLabel.common.dto.label.UpdateLabelDto;
 
+import java.util.List;
+
 public interface LabelService {
 
     LabelResponseDto createLabel(String userEmail, Long companyOwnerId, CreateLabelDto dto);
@@ -17,4 +19,6 @@ public interface LabelService {
     void deleteLabel(String userEmail, Long companyOwnerId, Long id);
 
     LabelResponseDto duplicateLabel(String userEmail, Long companyOwnerId, Long id, Long targetProductId);
+
+    List<LabelResponseDto> getLabelsByProductIds(String userEmail, Long companyOwnerId, List<Long> productIds);
 }
