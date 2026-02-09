@@ -34,7 +34,6 @@ public class FolderServiceIml implements FolderService {
     @Transactional
     @CacheEvict(value = "folderTrees", key = "#companyOwnerId")
     public FolderResponseDto createFolder(String userEmail, Long companyOwnerId, CreateFolderDto dto) {
-        // Проверяем доступ к компании
         companyService.checkAccess(userEmail, companyOwnerId);
 
         if (dto.getParentFolderId() != null) {

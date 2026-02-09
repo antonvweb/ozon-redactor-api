@@ -9,7 +9,7 @@ import org.springframework.context.annotation.FilterType;
 @SpringBootApplication
 @ComponentScan(
         basePackages = {
-                "org.ozonLabel.user",   // пакет твоего сервиса
+                "org.ozonLabel.user",
                 "org.ozonLabel.common"  // весь common
         },
         excludeFilters = @ComponentScan.Filter(
