@@ -10,7 +10,6 @@ public class CreateAccountDto {
     @NotBlank(message = "Email обязателен")
     @Email(message = "Некорректный email")
     private String email;
-    
     @NotBlank(message = "Код подтверждения обязателен")
     private String code;
     
