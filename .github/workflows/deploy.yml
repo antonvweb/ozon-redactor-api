@@ -5,45 +5,112 @@ on:
     branches:
       - main
 
+env:
+  DEPLOY_PATH: ${{ secrets.DEPLOY_PROD_PATH }}
+
 jobs:
+  # 1. Определяем какие модули изменились И какие нужно пересобрать
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      modules: ${{ steps.set-modules.outputs.modules || '[]' }}
+      common: ${{ steps.changes.outputs.common }}
+      authService: ${{ steps.changes.outputs.authService }}
+      userService: ${{ steps.changes.outputs.userService }}
+      ozonApi: ${{ steps.changes.outputs.ozonApi }}
+      # Флаги что нужно БИЛДИТЬ (с учётом зависимостей)
+      build-common: ${{ steps.changes.outputs.common }}
+      build-authService: ${{ steps.build.outputs.authService }}
+      build-userService: ${{ steps.build.outputs.userService }}
+      build-ozonApi: ${{ steps.build.outputs.ozonApi }}
+      any-changes: ${{ steps.changes.outputs.any }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Detect changed modules
-        id: detect
-        uses: tj-actions/changed-files@v45
-        with:
-          base: origin/main
-          fetch_depth: 0
-          json: true
-
-      - name: Extract modules
-        id: set-modules
+      - name: Check for changes
+        id: changes
         run: |
-          raw='${{ steps.detect.outputs.all_changed_files_json }}'
-          [ -z "$raw" ] && raw='${{ steps.detect.outputs.all_changed_files }}'
-          clean_json=$(echo "$raw" | sed 's/\\"/"/g')
-          echo "$clean_json" > temp.json
-          modules=$(jq -c '[.[] | select(test("^(common|authService|ozonApi|userService|notification)/")) | split("/")[0]] | unique' temp.json)
-          modules=$(echo "$modules" | jq -c 'if index("common") == null then . + ["common"] else . end')
-          echo "modules=$modules" >> $GITHUB_OUTPUT
+          # Получаем список изменённых файлов
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} 2>/dev/null || git diff --name-only HEAD~1 HEAD)
 
-  # 1. Синхронизация всего проекта (включая корневой pom.xml)
-  deploy-project-root:
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          # Проверяем каждый модуль
+          if echo "$CHANGED" | grep -q "^common/"; then
+            echo "common=true" >> $GITHUB_OUTPUT
+          else
+            echo "common=false" >> $GITHUB_OUTPUT
+          fi
+
+          if echo "$CHANGED" | grep -q "^authService/"; then
+            echo "authService=true" >> $GITHUB_OUTPUT
+          else
+            echo "authService=false" >> $GITHUB_OUTPUT
+          fi
+
+          if echo "$CHANGED" | grep -q "^userService/"; then
+            echo "userService=true" >> $GITHUB_OUTPUT
+          else
+            echo "userService=false" >> $GITHUB_OUTPUT
+          fi
+
+          if echo "$CHANGED" | grep -q "^ozonApi/"; then
+            echo "ozonApi=true" >> $GITHUB_OUTPUT
+          else
+            echo "ozonApi=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Проверяем есть ли вообще изменения в модулях
+          if echo "$CHANGED" | grep -qE "^(common|authService|userService|ozonApi)/"; then
+            echo "any=true" >> $GITHUB_OUTPUT
+          else
+            echo "any=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Calculate build targets (with dependencies)
+        id: build
+        run: |
+          # Граф зависимостей:
+          # common <- authService, userService, ozonApi
+          # userService <- ozonApi
+
+          COMMON="${{ steps.changes.outputs.common }}"
+          AUTH="${{ steps.changes.outputs.authService }}"
+          USER="${{ steps.changes.outputs.userService }}"
+          OZON="${{ steps.changes.outputs.ozonApi }}"
+
+          # authService: билдим если изменился он ИЛИ common
+          if [[ "$AUTH" == "true" || "$COMMON" == "true" ]]; then
+            echo "authService=true" >> $GITHUB_OUTPUT
+          else
+            echo "authService=false" >> $GITHUB_OUTPUT
+          fi
+
+          # userService: билдим если изменился он ИЛИ common
+          if [[ "$USER" == "true" || "$COMMON" == "true" ]]; then
+            echo "userService=true" >> $GITHUB_OUTPUT
+          else
+            echo "userService=false" >> $GITHUB_OUTPUT
+          fi
+
+          # ozonApi: билдим если изменился он ИЛИ common ИЛИ userService
+          if [[ "$OZON" == "true" || "$COMMON" == "true" || "$USER" == "true" ]]; then
+            echo "ozonApi=true" >> $GITHUB_OUTPUT
+          else
+            echo "ozonApi=false" >> $GITHUB_OUTPUT
+          fi
+
+  # 2. Синхронизация проекта на сервер (один раз)
+  sync-project:
     runs-on: ubuntu-latest
     needs: detect-changes
+    if: needs.detect-changes.outputs.any-changes == 'true'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup SSH (100% работает)
+      - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SERVER_SSH_KEY }}
@@ -53,122 +120,155 @@ jobs:
             UserKnownHostsFile /dev/null
             LogLevel ERROR
 
-      - name: Sync entire project
+      - name: Sync project to server
         run: |
-          echo "Синхронизация всего проекта в ${{ secrets.DEPLOY_PROD_PATH }}..."
           rsync -avz --delete \
-            --exclude='.git' --exclude='target' --exclude='.idea' --exclude='*.log' --exclude='node_modules' \
-            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/
+            --exclude='.git' \
+            --exclude='target' \
+            --exclude='.idea' \
+            --exclude='*.log' \
+            --exclude='node_modules' \
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ env.DEPLOY_PATH }}/
 
-  # 2. Установка common + domain (всегда, если они изменились)
-  deploy-common:
-    needs: [detect-changes, deploy-project-root]
-    if: contains(fromJson(needs.detect-changes.outputs.modules), 'common')
+  # 3. Билд common (если изменился)
+  build-common:
     runs-on: ubuntu-latest
+    needs: [detect-changes, sync-project]
+    if: needs.detect-changes.outputs.build-common == 'true'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SERVER_SSH_KEY }}
           known_hosts: unnecessary
           config: StrictHostKeyChecking no
-      - name: Install common
+
+      - name: Build and install common
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
-            cd ${{ secrets.DEPLOY_PROD_PATH }}
-            echo "Установка common"
-            mvn -U clean install -pl common -am -DskipTests
-            echo "common установлены в локальный репозиторий"
+            cd ${{ env.DEPLOY_PATH }}
+            echo "=== Building common module ==="
+            mvn -U clean install -pl common -DskipTests
+            echo "=== common installed to local repository ==="
           EOF
 
-  # 3. userService — теперь видит notification
-  deploy-userService:
-    needs: [detect-changes, deploy-project-root, deploy-common]
-    if: contains(fromJson(needs.detect-changes.outputs.modules), 'userService')
+  # 4. Билд authService
+  build-authService:
     runs-on: ubuntu-latest
+    needs: [detect-changes, sync-project, build-common]
+    # Запускаем если нужно билдить И (common уже собран ИЛИ common не менялся)
+    if: |
+      always() &&
+      needs.detect-changes.outputs.build-authService == 'true' &&
+      needs.sync-project.result == 'success' &&
+      (needs.build-common.result == 'success' || needs.build-common.result == 'skipped')
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SERVER_SSH_KEY }}
           known_hosts: unnecessary
           config: StrictHostKeyChecking no
-      - name: Deploy userService
-        run: |
-          rsync -avz --delete --exclude .idea --exclude target ./userService/ \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/userService/
 
+      - name: Build and deploy authService
+        run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
-            cd ${{ secrets.DEPLOY_PROD_PATH }}/userService
-            echo "Сборка userService (notification уже в ~/.m2)"
-            mvn clean install -DskipTests
-          EOF
+            cd ${{ env.DEPLOY_PATH }}
+            echo "=== Building authService ==="
+            mvn clean package -pl authService -am -DskipTests
 
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -ex
-            cd ${{ secrets.DEPLOY_PROD_PATH }}
-            pm2 delete user-service || true
-            pm2 start ecosystem.backend.config.js --only user-service --update-env
-            pm2 save
-          EOF
-
-  # 5. Остальные сервисы (не зависят от notification)
-  deploy-authService:
-    needs: [detect-changes, deploy-project-root, deploy-common]
-    if: contains(fromJson(needs.detect-changes.outputs.modules), 'authService')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup SSH
-        uses: shimataro/ssh-key-action@v2
-        with:
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          known_hosts: unnecessary
-          config: StrictHostKeyChecking no
-      - name: Deploy authService
-        run: |
-          rsync -avz --delete --exclude .idea --exclude target ./authService/ \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/authService/
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -e
-            cd ${{ secrets.DEPLOY_PROD_PATH }}/authService
-            mvn clean package -DskipTests
-            cd ${{ secrets.DEPLOY_PROD_PATH }}
+            echo "=== Restarting auth-service ==="
             pm2 delete auth-service || true
             pm2 start ecosystem.backend.config.js --only auth-service --update-env
             pm2 save
           EOF
 
-  deploy-ozonApi:
-    needs: [detect-changes, deploy-project-root, deploy-common, deploy-userService]
-    if: contains(fromJson(needs.detect-changes.outputs.modules), 'ozonApi')
+  # 5. Билд userService
+  build-userService:
     runs-on: ubuntu-latest
+    needs: [detect-changes, sync-project, build-common]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.build-userService == 'true' &&
+      needs.sync-project.result == 'success' &&
+      (needs.build-common.result == 'success' || needs.build-common.result == 'skipped')
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
       - name: Setup SSH
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SERVER_SSH_KEY }}
           known_hosts: unnecessary
           config: StrictHostKeyChecking no
-      - name: Deploy ozonApi
+
+      - name: Build and deploy userService
         run: |
-          rsync -avz --delete --exclude .idea --exclude target ./ozonApi/ \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PROD_PATH }}/ozonApi/
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
-            cd ${{ secrets.DEPLOY_PROD_PATH }}/ozonApi
-            mvn clean install -DskipTests
-            cd ${{ secrets.DEPLOY_PROD_PATH }}
+            cd ${{ env.DEPLOY_PATH }}
+            echo "=== Building userService ==="
+            mvn clean install -pl userService -am -DskipTests
+
+            echo "=== Restarting user-service ==="
+            pm2 delete user-service || true
+            pm2 start ecosystem.backend.config.js --only user-service --update-env
+            pm2 save
+          EOF
+
+  # 6. Билд ozonApi (зависит от userService)
+  build-ozonApi:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, sync-project, build-common, build-userService]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.build-ozonApi == 'true' &&
+      needs.sync-project.result == 'success' &&
+      (needs.build-common.result == 'success' || needs.build-common.result == 'skipped') &&
+      (needs.build-userService.result == 'success' || needs.build-userService.result == 'skipped')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: unnecessary
+          config: StrictHostKeyChecking no
+
+      - name: Build and deploy ozonApi
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -e
+            cd ${{ env.DEPLOY_PATH }}
+            echo "=== Building ozonApi ==="
+            mvn clean package -pl ozonApi -am -DskipTests
+
+            echo "=== Restarting ozon-api ==="
             pm2 delete ozon-api || true
             pm2 start ecosystem.backend.config.js --only ozon-api --update-env
             pm2 save
           EOF
+
+  # 7. Summary
+  summary:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-common, build-authService, build-userService, build-ozonApi]
+    if: always()
+    steps:
+      - name: Print summary
+        run: |
+          echo "## Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Module | Changed | Built | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|---------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| common | ${{ needs.detect-changes.outputs.common }} | ${{ needs.detect-changes.outputs.build-common }} | ${{ needs.build-common.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| authService | ${{ needs.detect-changes.outputs.authService }} | ${{ needs.detect-changes.outputs.build-authService }} | ${{ needs.build-authService.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| userService | ${{ needs.detect-changes.outputs.userService }} | ${{ needs.detect-changes.outputs.build-userService }} | ${{ needs.build-userService.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ozonApi | ${{ needs.detect-changes.outputs.ozonApi }} | ${{ needs.detect-changes.outputs.build-ozonApi }} | ${{ needs.build-ozonApi.result }} |" >> $GITHUB_STEP_SUMMARY
