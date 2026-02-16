@@ -1,10 +1,11 @@
-package org.ozonLabel.common.exception.ozon;
+package org.ozonLabel.ozonApi.exception;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.ozonLabel.common.exception.ozon.*;
 import org.ozonLabel.common.exception.user.BusinessException;
 import org.ozonLabel.common.exception.user.ConflictException;
 import org.ozonLabel.common.exception.user.ResourceNotFoundException;
@@ -22,7 +23,21 @@ import java.time.LocalDateTime;
 @RestControllerAdvice(basePackages = "org.ozonLabel.ozonApi")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @Slf4j
-public class GlobalExceptionHandler {
+public class OzonApiExceptionHandler {
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex) {
+        log.warn("Resource not found: {}", ex.getMessage());
+
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.NOT_FOUND.value())
+                .error("Не найдено")
+                .message(ex.getMessage())
+                .requiresSettings(false)
+                .build();
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
 
     @ExceptionHandler(OzonApiCredentialsMissingException.class)
     public ResponseEntity<ErrorResponse> handleOzonApiCredentialsMissing(OzonApiCredentialsMissingException ex) {
@@ -134,20 +149,6 @@ public class GlobalExceptionHandler {
                 .requiresSettings(false)
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-    }
-
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex) {
-        log.warn("Resource not found: {}", ex.getMessage());
-
-        ErrorResponse error = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.NOT_FOUND.value())
-                .error("Не найдено")
-                .message(ex.getMessage())
-                .requiresSettings(false)
-                .build();
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
     @ExceptionHandler(ValidationException.class)

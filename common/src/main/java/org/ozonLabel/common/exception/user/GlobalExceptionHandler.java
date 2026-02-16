@@ -3,6 +3,8 @@ package org.ozonLabel.common.exception.user;
 
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ApiResponse;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -15,6 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice(basePackages = {"org.ozonLabel.user", "org.ozonLabel.auth"})
+@Order(Ordered.LOWEST_PRECEDENCE)
 @Slf4j
 public class GlobalExceptionHandler {
 

@@ -1,7 +1,5 @@
 package org.ozonLabel.ozonApi;
 
-import org.ozonLabel.common.exception.user.GlobalExceptionHandler;
-
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
@@ -17,8 +15,8 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
                 "org.ozonLabel.user.service",
         },
         excludeFilters = @ComponentScan.Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = GlobalExceptionHandler.class
+                type = FilterType.REGEX,
+                pattern = "org\\.ozonLabel\\.common\\.exception\\..*\\.GlobalExceptionHandler"
         )
 )
 @EntityScan(basePackages = {
