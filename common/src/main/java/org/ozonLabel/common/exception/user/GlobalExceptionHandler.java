@@ -14,7 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.HashMap;
 import java.util.Map;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = {"org.ozonLabel.user", "org.ozonLabel.auth"})
 @Slf4j
 public class GlobalExceptionHandler {
 

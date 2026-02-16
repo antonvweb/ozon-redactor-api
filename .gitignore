@@ -3,6 +3,10 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+/.claude
+/.mvn
+/.idea
+
 ### STS ###
 .apt_generated
 .classpath
