@@ -76,7 +76,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.ozonLabel.common</groupId>
+            <groupId>org.ozonLabel</groupId>
             <artifactId>common</artifactId>
             <version>1.0.0</version>
             <scope>compile</scope>
