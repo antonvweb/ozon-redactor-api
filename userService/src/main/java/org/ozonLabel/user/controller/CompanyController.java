@@ -1,6 +1,8 @@
 package org.ozonLabel.user.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ApiResponse;
@@ -11,6 +13,7 @@ import org.ozonLabel.common.service.user.CompanyService;
 import org.ozonLabel.user.entity.CompanyMember;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,8 +21,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/company")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 @Slf4j
+@Validated
 public class CompanyController {
 
     private final CompanyService companyService;
@@ -47,7 +50,7 @@ public class CompanyController {
      */
     @DeleteMapping("/invitation/{invitationId}")
     public ResponseEntity<ApiResponse> cancelInvitation(
-            @PathVariable Long invitationId,
+            @PathVariable @Positive(message = "ID приглашения должен быть положительным") Long invitationId,
             Authentication auth) {
 
         String ownerEmail = auth.getName();
@@ -62,11 +65,12 @@ public class CompanyController {
      */
     @PostMapping("/accept-invitation/{token}")
     public ResponseEntity<ApiResponse> acceptInvitation(
-            @PathVariable String token,
+            @PathVariable @NotBlank(message = "Токен обязателен") String token,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Пользователь {} принимает приглашение с токеном {}", userEmail, token);
+        // SECURITY: Don't log the actual token value
+        log.info("Пользователь {} принимает приглашение", userEmail);
 
         companyService.acceptInvitation(token, userEmail);
 
@@ -78,11 +82,12 @@ public class CompanyController {
      */
     @PostMapping("/reject-invitation/{token}")
     public ResponseEntity<ApiResponse> rejectInvitation(
-            @PathVariable String token,
+            @PathVariable @NotBlank(message = "Токен обязателен") String token,
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Пользователь {} отклоняет приглашение с токеном {}", userEmail, token);
+        // SECURITY: Don't log the actual token value
+        log.info("Пользователь {} отклоняет приглашение", userEmail);
 
         companyService.rejectInvitation(token, userEmail);
 
@@ -94,7 +99,7 @@ public class CompanyController {
      */
     @PostMapping("/invitation/{invitationId}/accept")
     public ResponseEntity<ApiResponse> acceptInvitationById(
-            @PathVariable Long invitationId,
+            @PathVariable @Positive(message = "ID приглашения должен быть положительным") Long invitationId,
             Authentication auth) {
 
         String userEmail = auth.getName();
@@ -110,7 +115,7 @@ public class CompanyController {
      */
     @PostMapping("/invitation/{invitationId}/reject")
     public ResponseEntity<ApiResponse> rejectInvitationById(
-            @PathVariable Long invitationId,
+            @PathVariable @Positive(message = "ID приглашения должен быть положительным") Long invitationId,
             Authentication auth) {
 
         String userEmail = auth.getName();
@@ -138,7 +143,7 @@ public class CompanyController {
      */
     @GetMapping("/{companyOwnerId}/info")
     public ResponseEntity<CompanyInfoResponseDto> getCompanyInfo(
-            @PathVariable Long companyOwnerId,
+            @PathVariable @Positive(message = "ID компании должен быть положительным") Long companyOwnerId,
             Authentication auth) {
 
         String userEmail = auth.getName();
@@ -153,9 +158,9 @@ public class CompanyController {
      */
     @PatchMapping("/{companyOwnerId}/member/{memberId}/role")
     public ResponseEntity<ApiResponse> updateMemberRole(
-            @PathVariable Long companyOwnerId,
-            @PathVariable Long memberId,
-            @RequestBody UpdateRoleDto dto,
+            @PathVariable @Positive(message = "ID компании должен быть положительным") Long companyOwnerId,
+            @PathVariable @Positive(message = "ID пользователя должен быть положительным") Long memberId,
+            @Valid @RequestBody UpdateRoleDto dto,
             Authentication auth) {
 
         String adminEmail = auth.getName();
@@ -171,8 +176,8 @@ public class CompanyController {
      */
     @DeleteMapping("/{companyOwnerId}/member/{memberId}")
     public ResponseEntity<ApiResponse> removeMember(
-            @PathVariable Long companyOwnerId,
-            @PathVariable Long memberId,
+            @PathVariable @Positive(message = "ID компании должен быть положительным") Long companyOwnerId,
+            @PathVariable @Positive(message = "ID пользователя должен быть положительным") Long memberId,
             Authentication auth) {
 
         String adminEmail = auth.getName();
@@ -188,7 +193,7 @@ public class CompanyController {
      */
     @GetMapping("/{companyOwnerId}/audit-log")
     public ResponseEntity<AuditLogResponseDto> getAuditLog(
-            @PathVariable Long companyOwnerId,
+            @PathVariable @Positive(message = "ID компании должен быть положительным") Long companyOwnerId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             Authentication auth) {
@@ -211,8 +216,8 @@ public class CompanyController {
      */
     @GetMapping("/{companyOwnerId}/audit-log/user/{userId}")
     public ResponseEntity<AuditLogResponseDto> getUserAuditLog(
-            @PathVariable Long companyOwnerId,
-            @PathVariable Long userId,
+            @PathVariable @Positive(message = "ID компании должен быть положительным") Long companyOwnerId,
+            @PathVariable @Positive(message = "ID пользователя должен быть положительным") Long userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             Authentication auth) {
@@ -233,7 +238,7 @@ public class CompanyController {
      */
     @GetMapping("/{companyOwnerId}/audit-log/recent")
     public ResponseEntity<List<AuditLogEntryDto>> getRecentActions(
-            @PathVariable Long companyOwnerId,
+            @PathVariable @Positive(message = "ID компании должен быть положительным") Long companyOwnerId,
             Authentication auth) {
 
         String userEmail = auth.getName();

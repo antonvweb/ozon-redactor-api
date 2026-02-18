@@ -40,14 +40,21 @@ public class OzonController {
 
     /**
      * Синхронизирует товары из Ozon API с возможностью указания папки
+     * SECURITY: Added authorization check to prevent IDOR
      */
-    @PostMapping("/sync/{userId}")
+    @PostMapping("/sync/{companyOwnerId}")
     public ResponseEntity<SyncProductsResponse> syncProducts(
-            @PathVariable Long userId,
+            @PathVariable Long companyOwnerId,
             @RequestParam(required = false) Long folderId,
-            @RequestBody(required = false) SyncProductsRequest request) {
+            @RequestBody(required = false) SyncProductsRequest request,
+            Authentication auth) {
 
-        log.info("Начало синхронизации товаров для пользователя: {} в папку: {}", userId, folderId);
+        // SECURITY: Verify user has access to this company
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        log.info("Начало синхронизации товаров для компании: {} в папку: {} пользователем: {}",
+                companyOwnerId, folderId, userEmail);
 
         if (request == null) {
             request = SyncProductsRequest.builder()
@@ -63,11 +70,12 @@ public class OzonController {
         if (request.getLastId() == null) {
             request.setLastId("");
         }
-        if (request.getLimit() == null) {
-            request.setLimit(100);
+        if (request.getLimit() == null || request.getLimit() > 1000) {
+            // SECURITY: Limit max items to prevent DoS
+            request.setLimit(Math.min(request.getLimit() != null ? request.getLimit() : 100, 1000));
         }
 
-        SyncProductsResponse response = ozonService.syncProducts(userId, request, folderId);
+        SyncProductsResponse response = ozonService.syncProducts(companyOwnerId, request, folderId);
 
         log.info("Синхронизация завершена. Обработано товаров: {}", response.getProducts().size());
 
@@ -76,21 +84,23 @@ public class OzonController {
 
     /**
      * Альтернативная ручка с параметрами в query string
+     * SECURITY: Added authorization check to prevent IDOR
      */
-    @GetMapping("/sync/{userId}")
+    @GetMapping("/sync/{companyOwnerId}")
     public ResponseEntity<SyncProductsResponse> syncProductsSimple(
-            @PathVariable Long userId,
+            @PathVariable Long companyOwnerId,
             @RequestParam(required = false) Long folderId,
             @RequestParam(required = false, defaultValue = "") String lastId,
-            @RequestParam(required = false, defaultValue = "100") Integer limit) {
+            @RequestParam(required = false, defaultValue = "100") Integer limit,
+            Authentication auth) {
 
         SyncProductsRequest request = SyncProductsRequest.builder()
                 .filter(new HashMap<>())
                 .lastId(lastId)
-                .limit(limit)
+                .limit(Math.min(limit, 1000)) // SECURITY: Limit max
                 .build();
 
-        return syncProducts(userId, folderId, request);
+        return syncProducts(companyOwnerId, folderId, request, auth);
     }
 
     /**

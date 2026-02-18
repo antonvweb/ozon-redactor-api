@@ -8,7 +8,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.0</version>
+        <version>3.4.1</version>
         <relativePath/>
     </parent>
 
@@ -17,6 +17,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>Ozon Label API</name>
+    <description>Secure microservices API for Ozon Label management</description>
 
     <modules>
         <module>common</module>
@@ -30,12 +31,14 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-        <!-- Версии зависимостей -->
+        <!-- Версии зависимостей (обновлено для безопасности) -->
         <jjwt.version>0.12.6</jjwt.version>
         <hibernate-types.version>2.21.1</hibernate-types.version>
-        <bucket4j.version>8.7.0</bucket4j.version>
+        <bucket4j.version>8.10.1</bucket4j.version>
         <caffeine.version>3.1.8</caffeine.version>
         <lombok.version>1.18.34</lombok.version>
+        <snakeyaml.version>2.2</snakeyaml.version>
+        <postgresql.version>42.7.4</postgresql.version>
     </properties>
 
     <!-- Управление версиями зависимостей для всех модулей -->
@@ -101,6 +104,20 @@
                 <groupId>com.github.ben-manes.caffeine</groupId>
                 <artifactId>caffeine</artifactId>
                 <version>${caffeine.version}</version>
+            </dependency>
+
+            <!-- PostgreSQL (security update) -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+
+            <!-- SnakeYAML (security update for CVE fixes) -->
+            <dependency>
+                <groupId>org.yaml</groupId>
+                <artifactId>snakeyaml</artifactId>
+                <version>${snakeyaml.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -17,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -26,10 +29,18 @@ import java.util.UUID;
 @Slf4j
 public class ImageService {
 
+    // SECURITY: Removed SVG - potential XSS vector
     private static final Set<String> ALLOWED_TYPES = Set.of(
-            "image/png", "image/jpeg", "image/svg+xml", "image/webp"
+            "image/png", "image/jpeg", "image/webp"
     );
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+    // Magic bytes for file type verification
+    private static final byte[] PNG_MAGIC = new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47};
+    private static final byte[] JPEG_MAGIC_1 = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0};
+    private static final byte[] JPEG_MAGIC_2 = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE1};
+    private static final byte[] JPEG_MAGIC_3 = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xDB};
+    private static final byte[] WEBP_MAGIC = new byte[]{0x52, 0x49, 0x46, 0x46}; // RIFF
 
     private final UserImageRepository userImageRepository;
     private final FileStorageService fileStorageService;
@@ -112,8 +123,62 @@ public class ImageService {
             throw new ValidationException("Размер файла превышает 5 МБ");
         }
         if (!ALLOWED_TYPES.contains(file.getContentType())) {
-            throw new ValidationException("Недопустимый тип файла. Разрешены: PNG, JPEG, SVG, WebP");
+            throw new ValidationException("Недопустимый тип файла. Разрешены: PNG, JPEG, WebP");
         }
+
+        // SECURITY: Validate magic bytes to prevent Content-Type spoofing
+        try {
+            if (!isValidImageMagicBytes(file)) {
+                log.warn("File magic bytes validation failed for file: {}", file.getOriginalFilename());
+                throw new ValidationException("Недопустимый формат файла. Содержимое не соответствует заявленному типу.");
+            }
+        } catch (IOException e) {
+            log.error("Error reading file for magic bytes validation", e);
+            throw new ValidationException("Не удалось проверить файл");
+        }
+    }
+
+    /**
+     * Validates file content by checking magic bytes
+     */
+    private boolean isValidImageMagicBytes(MultipartFile file) throws IOException {
+        try (InputStream is = file.getInputStream()) {
+            byte[] header = new byte[12];
+            int bytesRead = is.read(header);
+
+            if (bytesRead < 4) {
+                return false;
+            }
+
+            String contentType = file.getContentType();
+            if (contentType == null) {
+                return false;
+            }
+
+            return switch (contentType) {
+                case "image/png" -> startsWith(header, PNG_MAGIC);
+                case "image/jpeg" -> startsWith(header, JPEG_MAGIC_1) ||
+                        startsWith(header, JPEG_MAGIC_2) ||
+                        startsWith(header, JPEG_MAGIC_3);
+                case "image/webp" -> startsWith(header, WEBP_MAGIC) &&
+                        bytesRead >= 12 &&
+                        header[8] == 'W' && header[9] == 'E' &&
+                        header[10] == 'B' && header[11] == 'P';
+                default -> false;
+            };
+        }
+    }
+
+    private boolean startsWith(byte[] data, byte[] prefix) {
+        if (data.length < prefix.length) {
+            return false;
+        }
+        for (int i = 0; i < prefix.length; i++) {
+            if (data[i] != prefix[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String getExtension(String filename) {

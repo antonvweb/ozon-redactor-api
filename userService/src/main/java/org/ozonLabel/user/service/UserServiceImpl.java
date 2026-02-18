@@ -170,8 +170,7 @@ public class UserServiceImpl implements UserService {
         dto.setOzonClientId(user.getOzonClientId());
         dto.setOzonApiKey(user.getOzonApiKey());
 
-        log.info("User {}: ozonClientId='{}', ozonApiKey='{}'", user.getId(), user.getOzonClientId(), user.getOzonApiKey());
-
+        // SECURITY: Never log sensitive credentials
         dto.setHasOzonClientId(user.getOzonClientId() != null && !user.getOzonClientId().trim().isEmpty());
         dto.setHasOzonApiKey(user.getOzonApiKey() != null && !user.getOzonApiKey().trim().isEmpty());
 

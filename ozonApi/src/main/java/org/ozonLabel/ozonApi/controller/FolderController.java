@@ -14,7 +14,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/folders")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 @Slf4j
 public class FolderController {
 

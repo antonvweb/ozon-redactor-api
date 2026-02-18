@@ -120,17 +120,50 @@ jobs:
             UserKnownHostsFile /dev/null
             LogLevel ERROR
 
+      - name: Create .env file on server
+        run: |
+          ssh -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENVEOF'
+            cat > ${{ env.DEPLOY_PATH }}/.env << 'EOF'
+            # Database
+            DB_URL=${{ secrets.DB_URL }}
+            DB_USERNAME=${{ secrets.DB_USERNAME }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+
+            # Redis
+            REDIS_HOST=${{ secrets.REDIS_HOST }}
+            REDIS_PORT=${{ secrets.REDIS_PORT }}
+            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+
+            # JWT
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+
+            # Email
+            MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
+            MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
+
+            # Cookies
+            COOKIE_SECURE=true
+            COOKIE_DOMAIN=.print-365.ru
+
+            # Logging
+            LOG_LEVEL=WARN
+            SHOW_SQL=false
+            EOF
+            chmod 600 ${{ env.DEPLOY_PATH }}/.env
+          ENVEOF
+
       - name: Sync project to server
         run: |
           rsync -avz --delete \
             --timeout=120 \
             --partial \
-            -e "ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
+            -e "ssh -p ${{ secrets.SERVER_SSH_PORT }} -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
             --exclude='.git' \
             --exclude='target' \
             --exclude='.idea' \
             --exclude='*.log' \
             --exclude='node_modules' \
+            --exclude='.env' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ env.DEPLOY_PATH }}/
 
   # 3. Билд common (если изменился)
@@ -150,7 +183,7 @@ jobs:
 
       - name: Build and install common
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          ssh -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ env.DEPLOY_PATH }}
             echo "=== Building common module ==="
@@ -180,13 +213,14 @@ jobs:
 
       - name: Build and deploy authService
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          ssh -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ env.DEPLOY_PATH }}
             echo "=== Building authService ==="
             mvn clean package -pl authService -am -DskipTests
 
             echo "=== Restarting auth-service ==="
+            set -a && source .env && set +a
             pm2 delete auth-service || true
             pm2 start ecosystem.backend.config.js --only auth-service --update-env
             pm2 save
@@ -213,13 +247,14 @@ jobs:
 
       - name: Build and deploy userService
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          ssh -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ env.DEPLOY_PATH }}
             echo "=== Building userService ==="
             mvn clean install -pl userService -am -DskipTests
 
             echo "=== Restarting user-service ==="
+            set -a && source .env && set +a
             pm2 delete user-service || true
             pm2 start ecosystem.backend.config.js --only user-service --update-env
             pm2 save
@@ -247,13 +282,14 @@ jobs:
 
       - name: Build and deploy ozonApi
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          ssh -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             cd ${{ env.DEPLOY_PATH }}
             echo "=== Building ozonApi ==="
             mvn clean package -pl ozonApi -am -DskipTests
 
             echo "=== Restarting ozon-api ==="
+            set -a && source .env && set +a
             pm2 delete ozon-api || true
             pm2 start ecosystem.backend.config.js --only ozon-api --update-env
             pm2 save

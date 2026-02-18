@@ -14,7 +14,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/label-sizes")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class LabelSizeController {
 
     private final LabelSizeService labelSizeService;

@@ -18,7 +18,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/labels")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 @Slf4j
 public class LabelController {
 

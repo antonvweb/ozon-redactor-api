@@ -16,7 +16,6 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/images")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 @Slf4j
 public class ImageController {
 

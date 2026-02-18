@@ -35,3 +35,19 @@ build/
 
 ### Logs ###
 *.log
+
+### Security - NEVER commit these! ###
+.env
+.env.local
+.env.*.local
+*.env
+application-local.properties
+application-local.yml
+secrets/
+*.pem
+*.key
+*.p12
+*.jks
+
+### Uploads ###
+uploads/
