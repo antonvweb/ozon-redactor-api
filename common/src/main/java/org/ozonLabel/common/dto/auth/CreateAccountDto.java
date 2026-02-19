@@ -18,4 +18,5 @@ public class CreateAccountDto {
     private String phone;
     private String ozonClientId;
     private String ozonApiKey;
+
 }
