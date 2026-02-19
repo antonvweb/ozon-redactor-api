@@ -76,9 +76,8 @@ public class SecurityConfig {
         // SECURITY: Only allow specific trusted origins
         config.setAllowedOriginPatterns(List.of(
                 "https://print-365.ru",
-                "https://*.print-365.ru"
-                // Development: uncomment below for local testing
-                // "http://localhost:3000"
+                "https://*.print-365.ru",
+                "http://localhost:3000"  // TODO: убрать после разработки
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         // SECURITY: Explicitly list allowed headers instead of wildcard

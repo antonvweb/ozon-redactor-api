@@ -78,9 +78,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of(
                 "https://print-365.ru",
-                "https://*.print-365.ru"
-                // Uncomment for development:
-                // "http://localhost:3000"
+                "https://*.print-365.ru",
+                "http://localhost:3000"  // TODO: убрать после разработки
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of(
