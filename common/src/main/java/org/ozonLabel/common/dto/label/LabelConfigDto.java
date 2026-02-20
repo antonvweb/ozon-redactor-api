@@ -32,4 +32,5 @@ public class LabelConfigDto {
     @NotNull(message = "Список элементов обязателен")
     @Valid
     private List<ElementDto> elements;
+
 }
