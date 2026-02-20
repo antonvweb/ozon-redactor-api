@@ -143,7 +143,7 @@ jobs:
 
             # Cookies
             COOKIE_SECURE=true
-            COOKIE_DOMAIN=.print-365.ru
+            COOKIE_DOMAIN=print-365.ru
 
             # Logging
             LOG_LEVEL=WARN
