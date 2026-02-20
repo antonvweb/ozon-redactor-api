@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 public class ElementDto {
     // Обязательные поля
     private String id;
+    private String name;
     private String type;
     private Integer layerId;
     private BigDecimal x;
