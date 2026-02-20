@@ -20,7 +20,7 @@ const commonEnv = {
 
   // Cookies
   COOKIE_SECURE: process.env.COOKIE_SECURE || "true",
-  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || ".print-365.ru",
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || "print-365.ru",
 
   // Email
   MAIL_HOST: process.env.MAIL_HOST || "smtp.yandex.ru",
