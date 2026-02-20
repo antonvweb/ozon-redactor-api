@@ -122,35 +122,21 @@ jobs:
 
       - name: Create .env file on server
         run: |
-          ssh -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENVEOF'
-            cat > ${{ env.DEPLOY_PATH }}/.env << 'EOF'
-            # Database
-            DB_URL=${{ secrets.DB_URL }}
-            DB_USERNAME=${{ secrets.DB_USERNAME }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-
-            # Redis
-            REDIS_HOST=${{ secrets.REDIS_HOST }}
-            REDIS_PORT=${{ secrets.REDIS_PORT }}
-            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-
-            # JWT
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-
-            # Email
-            MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
-            MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
-
-            # Cookies
-            COOKIE_SECURE=true
-            COOKIE_DOMAIN=print-365.ru
-
-            # Logging
-            LOG_LEVEL=WARN
-            SHOW_SQL=false
-            EOF
-            chmod 600 ${{ env.DEPLOY_PATH }}/.env
-          ENVEOF
+          cat << 'EOF' | sed 's/^[[:space:]]*//' | ssh -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cat > ${{ env.DEPLOY_PATH }}/.env && chmod 600 ${{ env.DEPLOY_PATH }}/.env"
+          DB_URL=${{ secrets.DB_URL }}
+          DB_USERNAME=${{ secrets.DB_USERNAME }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          REDIS_HOST=${{ secrets.REDIS_HOST }}
+          REDIS_PORT=${{ secrets.REDIS_PORT }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
+          COOKIE_SECURE=true
+          COOKIE_DOMAIN=.print-365.ru
+          LOG_LEVEL=WARN
+          SHOW_SQL=false
+          EOF
 
       - name: Sync project to server
         run: |
