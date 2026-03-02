@@ -20,7 +20,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.ozonLabel.common.model.SourceType;
+import org.ozonLabel.common.exception.user.ValidationException;
+import org.ozonLabel.common.dto.label.LayerVisibilityRequest;
+import org.ozonLabel.common.dto.label.LabelConfigDto;
+import org.ozonLabel.common.dto.label.LayerDto;
+import org.ozonLabel.ozonApi.entity.Label;
+import org.ozonLabel.ozonApi.repository.LabelRepository;
+import org.ozonLabel.ozonApi.service.OzonServiceIml;
+import org.ozonLabel.common.dto.ozon.SyncProductsRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +41,10 @@ public class FolderServiceIml implements FolderService {
 
     private final ProductFolderRepository folderRepository;
     private final OzonProductRepository productRepository;
+    private final LabelRepository labelRepository;
     private final CompanyService companyService;
+    private final ObjectMapper objectMapper;
+    private final OzonServiceIml ozonService;
 
     @Transactional
     @CacheEvict(value = "folderTrees", key = "#companyOwnerId")
@@ -52,6 +67,7 @@ public class FolderServiceIml implements FolderService {
                 .color(dto.getColor())
                 .icon(dto.getIcon())
                 .position(0)
+                .sourceType(dto.getSourceType() != null ? dto.getSourceType() : SourceType.MANUAL)
                 .build();
 
         folder = folderRepository.save(folder);
@@ -155,6 +171,9 @@ public class FolderServiceIml implements FolderService {
         if (!allValid) {
             throw new FolderAccessDeniedException("Некоторые товары не принадлежат этой компании.");
         }
+
+        // Валидация sourceType при перемещении
+        validateSourceTypeMove(products, dto.getTargetFolderId());
 
         // Use bulk update instead of saveAll
         int updated = productRepository.bulkMoveProductsToFolder(
@@ -351,6 +370,198 @@ public class FolderServiceIml implements FolderService {
             List<OzonProduct> products = productRepository.findByUserIdAndFolderId(userId, folId);
             products.forEach(p -> p.setFolderId(null));
             productRepository.saveAll(products);
+        }
+    }
+
+    /**
+     * Валидация перемещения товаров по типу источника (sourceType)
+     * - API → можно перемещать только в подпапки API-папок или в корень
+     * - EXCEL → можно перемещать только в подпапки EXCEL-папок или в корень
+     * - MANUAL → можно в любую папку
+     * - TEMPLATE → можно в любую папку
+     */
+    private void validateSourceTypeMove(List<OzonProduct> products, Long targetFolderId) {
+        if (targetFolderId == null) {
+            // Перемещение в корень — всегда разрешено
+            return;
+        }
+
+        // Определяем sourceType исходных папок товаров
+        Set<Long> sourceFolderIds = products.stream()
+                .map(OzonProduct::getFolderId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+
+        if (sourceFolderIds.isEmpty()) {
+            // Товары без папки — можно перемещать куда угодно
+            return;
+        }
+
+        // Получаем sourceType исходных папок
+        List<ProductFolder> sourceFolders = folderRepository.findAllById(sourceFolderIds);
+        
+        // Проверяем есть ли папки типа API или EXCEL
+        boolean hasApiSource = sourceFolders.stream()
+                .anyMatch(f -> f.getSourceType() == SourceType.API);
+        boolean hasExcelSource = sourceFolders.stream()
+                .anyMatch(f -> f.getSourceType() == SourceType.EXCEL);
+
+        if (!hasApiSource && !hasExcelSource) {
+            // Только MANUAL или TEMPLATE — можно перемещать куда угодно
+            return;
+        }
+
+        // Проверяем целевую папку
+        ProductFolder targetFolder = folderRepository.findById(targetFolderId)
+                .orElseThrow(() -> new FolderNotFoundException("Целевая папка не найдена"));
+
+        // Если товары из API-папки
+        if (hasApiSource) {
+            if (targetFolder.getSourceType() != SourceType.API && !targetFolder.isRootFolder()) {
+                throw new ValidationException(
+                    "Товары из API-папки можно перемещать только в подпапки API или в корень"
+                );
+            }
+            // Проверяем всю иерархию родительских папок — все должны быть API или корень
+            ProductFolder current = targetFolder;
+            while (current != null && current.getParentFolderId() != null) {
+                current = folderRepository.findById(current.getParentFolderId()).orElse(null);
+                if (current != null && current.getSourceType() != SourceType.API) {
+                    throw new ValidationException(
+                        "Товары из API-папки можно перемещать только в подпапки API или в корень"
+                    );
+                }
+            }
+        }
+
+        // Если товары из EXCEL-папки
+        if (hasExcelSource) {
+            if (targetFolder.getSourceType() != SourceType.EXCEL && !targetFolder.isRootFolder()) {
+                throw new ValidationException(
+                    "Товары из EXCEL-папки можно перемещать только в подпапки EXCEL или в корень"
+                );
+            }
+            // Проверяем всю иерархию родительских папок — все должны быть EXCEL или корень
+            ProductFolder current = targetFolder;
+            while (current != null && current.getParentFolderId() != null) {
+                current = folderRepository.findById(current.getParentFolderId()).orElse(null);
+                if (current != null && current.getSourceType() != SourceType.EXCEL) {
+                    throw new ValidationException(
+                        "Товары из EXCEL-папки можно перемещать только в подпапки EXCEL или в корень"
+                    );
+                }
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public void updateLayerVisibility(String userEmail, Long companyOwnerId, Long folderId, LayerVisibilityRequest dto) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        // Получаем все продукты в папке
+        List<OzonProduct> products = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId);
+        
+        if (products.isEmpty()) {
+            log.info("В папке {} нет продуктов для обновления видимости слоя", folderId);
+            return;
+        }
+
+        List<Long> productIds = products.stream()
+                .map(OzonProduct::getProductId)
+                .toList();
+
+        // Получаем все этикетки для этих продуктов
+        List<Label> labels = labelRepository.findByCompanyIdAndProductIdIn(companyOwnerId, productIds);
+        
+        if (labels.isEmpty()) {
+            log.info("Для продуктов папки {} не найдено этикеток", folderId);
+            return;
+        }
+
+        // Обновляем видимость слоя в каждой этикетке
+        int updatedCount = 0;
+        for (Label label : labels) {
+            try {
+                LabelConfigDto config = objectMapper.readValue(label.getConfig(), LabelConfigDto.class);
+                
+                // Находим и обновляем слой
+                boolean layerFound = false;
+                for (LayerDto layer : config.getLayers()) {
+                    if (layer.getId().equals(dto.getLayerId())) {
+                        layer.setVisible(dto.getVisible());
+                        layerFound = true;
+                        break;
+                    }
+                }
+
+                if (layerFound) {
+                    // Сериализуем обратно в JSON
+                    label.setConfig(objectMapper.writeValueAsString(config));
+                    updatedCount++;
+                }
+            } catch (Exception e) {
+                log.error("Ошибка обновления конфигурации этикетки id={}: {}", label.getId(), e.getMessage());
+            }
+        }
+
+        // Сохраняем все изменения batch update
+        if (updatedCount > 0) {
+            labelRepository.saveAll(labels);
+            log.info("Обновлена видимость слоя {} для {} этикеток в папке {} пользователем {}", 
+                    dto.getLayerId(), updatedCount, folderId, userEmail);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void refreshFolder(String userEmail, Long companyOwnerId, Long folderId) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        ProductFolder folder = folderRepository.findById(folderId)
+                .orElseThrow(() -> new FolderNotFoundException("Папка не найдена"));
+
+        if (!folder.getUserId().equals(companyOwnerId)) {
+            throw new FolderAccessDeniedException("Доступ запрещён");
+        }
+
+        // Проверяем sourceType
+        switch (folder.getSourceType()) {
+            case API:
+                // Пересинхронизация товаров из Ozon API
+                List<OzonProduct> products = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId);
+                List<Long> productIds = products.stream()
+                        .map(OzonProduct::getProductId)
+                        .toList();
+
+                if (!productIds.isEmpty()) {
+                    // Создаём запрос на синхронизацию только для этих продуктов
+                    SyncProductsRequest request = SyncProductsRequest.builder()
+                            .productIds(productIds)
+                            .build();
+                    
+                    // Вызываем синхронизацию
+                    ozonService.syncProducts(companyOwnerId, request, folderId);
+                    log.info("Выполнена пересинхронизация папки {} для компании {} пользователем {}", 
+                            folderId, companyOwnerId, userEmail);
+                }
+                break;
+
+            case EXCEL:
+                throw new ValidationException(
+                    "Для папок типа EXCEL необходимо перезагрузить файл"
+                );
+
+            case MANUAL:
+            case TEMPLATE:
+                throw new ValidationException(
+                    "Папки этого типа не поддерживают обновление"
+                );
+
+            default:
+                throw new ValidationException(
+                    "Неподдерживаемый тип папки: " + folder.getSourceType()
+                );
         }
     }
 }

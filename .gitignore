@@ -3,7 +3,7 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-/.claude
+.claude/
 /.mvn
 /.idea
 
@@ -21,6 +21,7 @@ target/
 *.iws
 *.iml
 *.ipr
+
 
 ### NetBeans ###
 /nbproject/private/

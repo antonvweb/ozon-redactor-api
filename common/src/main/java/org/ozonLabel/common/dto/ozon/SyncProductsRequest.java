@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -17,4 +18,9 @@ public class SyncProductsRequest {
     @JsonProperty("last_id")
     private String lastId;
     private Integer limit;
+    
+    /**
+     * Список ID продуктов для синхронизации (опционально)
+     */
+    private List<Long> productIds;
 }

@@ -3,6 +3,7 @@ package org.ozonLabel.ozonApi.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ApiResponse;
+import org.ozonLabel.common.dto.label.LayerVisibilityRequest;
 import org.ozonLabel.common.dto.ozon.*;
 import org.ozonLabel.common.service.ozon.FolderService;
 import org.springframework.http.ResponseEntity;
@@ -143,5 +144,40 @@ public class FolderController {
         String userEmail = auth.getName();
         List<FolderPathDto> path = folderService.getFolderPath(userEmail, companyOwnerId, folderId);
         return ResponseEntity.ok(path);
+    }
+
+    /**
+     * Обновить видимость слоя для всех этикеток в папке
+     */
+    @PatchMapping("/{folderId}/layer-visibility")
+    public ResponseEntity<ApiResponse> updateLayerVisibility(
+            @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
+            @RequestBody LayerVisibilityRequest dto,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Обновление видимости слоя {} в папке {} компании {} пользователем {}",
+                dto.getLayerId(), folderId, companyOwnerId, userEmail);
+
+        folderService.updateLayerVisibility(userEmail, companyOwnerId, folderId, dto);
+        return ResponseEntity.ok(ApiResponse.success("Видимость слоя обновлена"));
+    }
+
+    /**
+     * Обновить данные папки (ресинхронизация)
+     */
+    @PostMapping("/{folderId}/refresh")
+    public ResponseEntity<ApiResponse> refreshFolder(
+            @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Обновление данных папки {} компании {} пользователем {}",
+                folderId, companyOwnerId, userEmail);
+
+        folderService.refreshFolder(userEmail, companyOwnerId, folderId);
+        return ResponseEntity.ok(ApiResponse.success("Папка успешно обновлена"));
     }
 }

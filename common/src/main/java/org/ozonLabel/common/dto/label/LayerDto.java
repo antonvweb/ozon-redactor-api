@@ -14,4 +14,6 @@ public class LayerDto {
     private String name;
     private Boolean locked;
     private Boolean visible;
+    private String layerType; // static или dynamic
+    private String columnName; // для динамических слоёв
 }

@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.ozonLabel.common.model.SourceType;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -40,6 +41,11 @@ public class ProductFolder {
     @Column
     @Builder.Default
     private Integer position = 0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type")
+    @Builder.Default
+    private SourceType sourceType = SourceType.MANUAL;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

@@ -1,6 +1,7 @@
 package org.ozonLabel.common.service.ozon;
 
 import org.ozonLabel.common.dto.ozon.*;
+import org.ozonLabel.common.dto.label.LayerVisibilityRequest;
 
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +31,12 @@ public interface FolderService {
 
     // Получение пути к папке
     List<FolderPathDto> getFolderPath(String userEmail, Long companyOwnerId, Long folderId);
+
+    // Обновление видимости слоя для всех этикеток в папке
+    void updateLayerVisibility(String userEmail, Long companyOwnerId, Long folderId, LayerVisibilityRequest dto);
+
+    // Обновление данных папки (ресинхронизация)
+    void refreshFolder(String userEmail, Long companyOwnerId, Long folderId);
 
     List<FolderResponseDto> findByUserIdAndParentFolderIdIsNullOrderByPositionAsc(Long userId);
     List<FolderResponseDto> findByUserIdAndParentFolderIdOrderByPositionAsc(Long userId, Long parentFolderId);

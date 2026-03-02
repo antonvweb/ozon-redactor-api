@@ -2,9 +2,16 @@ package org.ozonLabel.common.dto.ozon;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.ozonLabel.common.model.SourceType;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CreateFolderDto {
 
     @NotNull(message = "Folder name cannot be null")
@@ -14,4 +21,7 @@ public class CreateFolderDto {
     private Long parentFolderId;
     private String color;
     private String icon;
+    
+    @Builder.Default
+    private SourceType sourceType = SourceType.MANUAL;
 }
