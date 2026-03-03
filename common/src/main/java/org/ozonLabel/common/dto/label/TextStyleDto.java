@@ -22,4 +22,5 @@ public class TextStyleDto {
     private String backgroundColor;
     private Boolean inverted;
     private BigDecimal lineHeight;
+    private BigDecimal letterSpacing;
 }

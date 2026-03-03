@@ -1,6 +1,7 @@
 package org.ozonLabel.ozonApi.service;
 
 import com.itextpdf.barcodes.Barcode128;
+import com.itextpdf.barcodes.BarcodeEAN;
 import com.itextpdf.kernel.colors.Color;
 import com.itextpdf.kernel.colors.DeviceRgb;
 import com.itextpdf.kernel.pdf.PdfDocument;
@@ -8,9 +9,11 @@ import com.itextpdf.kernel.pdf.PdfPage;
 import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.kernel.pdf.canvas.PdfCanvas;
 import com.itextpdf.kernel.geom.PageSize;
+import com.itextpdf.kernel.geom.Rectangle;
 import com.itextpdf.layout.Canvas;
 import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.properties.TextAlignment;
+import com.itextpdf.layout.borders.SolidBorder;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.EncodeHintType;
 import com.google.zxing.WriterException;
@@ -177,12 +180,15 @@ public class PrintServiceImpl implements PrintService {
         float width = element.getWidth().floatValue() * (float) MM_TO_POINTS;
         float height = element.getHeight().floatValue() * (float) MM_TO_POINTS;
 
+        // Получаем rotation (по умолчанию 0)
+        Integer rotation = element.getRotation() != null ? element.getRotation().intValue() : 0;
+
         switch (type) {
             case "text":
-                renderText(canvas, element, x, y, width, height);
+                renderText(canvas, element, x, y, width, height, rotation);
                 break;
             case "barcode":
-                renderBarcode(canvas, element, x, y, width, height);
+                renderBarcode(canvas, element, x, y, width, height, rotation);
                 break;
             case "datamatrix":
                 renderDataMatrix(canvas, element, x, y, width, height, companyOwnerId, productId);
@@ -191,12 +197,18 @@ public class PrintServiceImpl implements PrintService {
                 renderQRCode(canvas, element, x, y, width, height);
                 break;
             case "date":
-                renderDate(canvas, element, x, y, width, height);
+                renderDate(canvas, element, x, y, width, height, rotation);
+                break;
+            case "image":
+                renderImage(canvas, element, x, y, width, height, rotation);
+                break;
+            case "rectangle":
+                renderRectangle(canvas, element, x, y, width, height, rotation);
                 break;
         }
     }
 
-    private void renderText(Canvas canvas, ElementDto element, float x, float y, float width, float height) {
+    private void renderText(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
         String content = element.getContent() != null ? element.getContent() : "";
         TextStyleDto style = element.getStyle();
 
@@ -210,9 +222,9 @@ public class PrintServiceImpl implements PrintService {
 
             Paragraph paragraph = new Paragraph(content)
                     .setFont(font)
-                    .setFontSize(fontSize)
-                    .setFixedPosition(x, y, width);
+                    .setFontSize(fontSize);
 
+            // Text alignment
             if (style.getTextAlign() != null) {
                 switch (style.getTextAlign()) {
                     case "left": paragraph.setTextAlignment(TextAlignment.LEFT); break;
@@ -221,24 +233,150 @@ public class PrintServiceImpl implements PrintService {
                 }
             }
 
+            // Цвет текста
+            if (style.getColor() != null) {
+                Color textColor = parseColor(style.getColor());
+                paragraph.setFontColor(textColor);
+            }
+
+            // Background color
+            if (style.getBackgroundColor() != null) {
+                Color bgColor = parseColor(style.getBackgroundColor());
+                paragraph.setBackgroundColor(bgColor);
+            }
+
+            // Inverted (белый текст на чёрном фоне)
+            if (style.getInverted() != null && style.getInverted()) {
+                paragraph.setFontColor(new DeviceRgb(255, 255, 255));
+                paragraph.setBackgroundColor(new DeviceRgb(0, 0, 0));
+            }
+
+            // Line height
+            if (style.getLineHeight() != null) {
+                paragraph.setMultipliedLeading(style.getLineHeight().floatValue());
+            }
+
+            // Letter spacing
+            if (style.getLetterSpacing() != null) {
+                paragraph.setCharacterSpacing(style.getLetterSpacing().floatValue());
+            }
+
+            // Bold/Italic/Underline будут обрабатываться через шрифт
+            // Для полной поддержки нужны разные файлы шрифтов
+            if (style.getUnderline() != null && style.getUnderline()) {
+                paragraph.setUnderline();
+            }
+
+            // Rotation
+            if (rotation != null && rotation != 0) {
+                paragraph.setRotationAngle(Math.toRadians(rotation));
+            }
+
+            paragraph.setFixedPosition(x, y, width);
             canvas.add(paragraph);
         } catch (Exception e) {
             log.error("Ошибка рендеринга текста: {}", e.getMessage());
         }
     }
 
-    private void renderBarcode(Canvas canvas, ElementDto element, float x, float y, float width, float height) {
-        // Упрощённая заглушка для штрихкода - текст с кодом
-        // В полной реализации здесь должна быть генерация штрихкода iText
+    private void renderBarcode(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
         String content = element.getContent() != null ? element.getContent() : "";
-        
+        String barcodeType = element.getBarcodeType() != null ? element.getBarcodeType() : "Code 128";
+
+        if (content.isEmpty()) {
+            log.warn("Пустое содержимое штрихкода");
+            return;
+        }
+
         try {
-            Paragraph paragraph = new Paragraph(content)
-                    .setFontSize(8)
-                    .setFixedPosition(x, y, width);
-            canvas.add(paragraph);
+            PdfDocument pdfDocument = canvas.getPdfDocument();
+            PdfPage page = pdfDocument.getLastPage();
+            PdfCanvas pdfCanvas = new PdfCanvas(page);
+
+            switch (barcodeType) {
+                case "Code 128":
+                case "Code128":
+                    Barcode128 barcode128 = new Barcode128(pdfDocument);
+                    barcode128.setCode(content);
+                    barcode128.setSize(8);
+                    barcode128.setBaseline(10);
+
+                    // Рендерим штрихкод
+                    com.itextpdf.layout.element.Image barcodeImage128 = new com.itextpdf.layout.element.Image(
+                        barcode128.createFormXObject(pdfDocument));
+                    barcodeImage128.setFixedPosition(x, y);
+                    barcodeImage128.scaleToFit(width, height);
+
+                    if (rotation != null && rotation != 0) {
+                        barcodeImage128.setRotationAngle(Math.toRadians(rotation));
+                    }
+
+                    canvas.add(barcodeImage128);
+                    break;
+
+                case "EAN-13":
+                case "EAN13":
+                    if (content.length() != 13) {
+                        log.warn("EAN-13 требует 13 цифр, получено: {}", content.length());
+                        return;
+                    }
+                    BarcodeEAN barcodeEAN13 = new BarcodeEAN(pdfDocument);
+                    barcodeEAN13.setCodeType(BarcodeEAN.EAN13);
+                    barcodeEAN13.setCode(content);
+
+                    com.itextpdf.layout.element.Image barcodeImageEAN13 = new com.itextpdf.layout.element.Image(
+                        barcodeEAN13.createFormXObject(pdfDocument));
+                    barcodeImageEAN13.setFixedPosition(x, y);
+                    barcodeImageEAN13.scaleToFit(width, height);
+
+                    if (rotation != null && rotation != 0) {
+                        barcodeImageEAN13.setRotationAngle(Math.toRadians(rotation));
+                    }
+
+                    canvas.add(barcodeImageEAN13);
+                    break;
+
+                case "EAN-8":
+                case "EAN8":
+                    if (content.length() != 8) {
+                        log.warn("EAN-8 требует 8 цифр, получено: {}", content.length());
+                        return;
+                    }
+                    BarcodeEAN barcodeEAN8 = new BarcodeEAN(pdfDocument);
+                    barcodeEAN8.setCodeType(BarcodeEAN.EAN8);
+                    barcodeEAN8.setCode(content);
+
+                    com.itextpdf.layout.element.Image barcodeImageEAN8 = new com.itextpdf.layout.element.Image(
+                        barcodeEAN8.createFormXObject(pdfDocument));
+                    barcodeImageEAN8.setFixedPosition(x, y);
+                    barcodeImageEAN8.scaleToFit(width, height);
+
+                    if (rotation != null && rotation != 0) {
+                        barcodeImageEAN8.setRotationAngle(Math.toRadians(rotation));
+                    }
+
+                    canvas.add(barcodeImageEAN8);
+                    break;
+
+                default:
+                    log.warn("Неподдерживаемый тип штрихкода: {}", barcodeType);
+                    // Фоллбэк на текст
+                    Paragraph fallbackText = new Paragraph(content)
+                            .setFontSize(8)
+                            .setFixedPosition(x, y, width);
+                    canvas.add(fallbackText);
+            }
         } catch (Exception e) {
-            log.error("Ошибка рендеринга штрихкода: {}", e.getMessage());
+            log.error("Ошибка рендеринга штрихкода {}: {}", barcodeType, e.getMessage(), e);
+            // Фоллбэк: показываем текст вместо штрихкода
+            try {
+                Paragraph fallbackText = new Paragraph(content)
+                        .setFontSize(8)
+                        .setFixedPosition(x, y, width);
+                canvas.add(fallbackText);
+            } catch (Exception ex) {
+                log.error("Ошибка фоллбэка для штрихкода: {}", ex.getMessage());
+            }
         }
     }
 
@@ -293,14 +431,14 @@ public class PrintServiceImpl implements PrintService {
         }
     }
 
-    private void renderDate(Canvas canvas, ElementDto element, float x, float y, float width, float height) {
+    private void renderDate(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
         DateSettingsDto dateSettings = element.getDateSettings();
         String content = element.getContent();
 
         if (dateSettings != null && dateSettings.getUseCurrentDate() != null && dateSettings.getUseCurrentDate()) {
             LocalDate now = LocalDate.now();
             String format = dateSettings.getFormat() != null ? dateSettings.getFormat() : "DD.MM.YYYY";
-            
+
             DateTimeFormatter formatter = switch (format) {
                 case "DD.MM.YYYY" -> DateTimeFormatter.ofPattern("dd.MM.yyyy");
                 case "DD.MM.GG" -> DateTimeFormatter.ofPattern("dd.MM.yy");
@@ -315,8 +453,8 @@ public class PrintServiceImpl implements PrintService {
                 .content(content)
                 .style(element.getStyle())
                 .build();
-        
-        renderText(canvas, textElement, x, y, width, height);
+
+        renderText(canvas, textElement, x, y, width, height, rotation);
     }
 
     private void addSeparator(PdfDocument pdf, String separatorType) {
@@ -368,14 +506,144 @@ public class PrintServiceImpl implements PrintService {
     private byte[] bitMatrixToPng(BitMatrix bitMatrix) {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             javax.imageio.ImageIO.write(
-                com.google.zxing.client.j2se.MatrixToImageWriter.toBufferedImage(bitMatrix), 
-                "PNG", 
+                com.google.zxing.client.j2se.MatrixToImageWriter.toBufferedImage(bitMatrix),
+                "PNG",
                 baos
             );
             return baos.toByteArray();
         } catch (Exception e) {
             log.error("Ошибка конвертации BitMatrix в PNG: {}", e.getMessage());
             return null;
+        }
+    }
+
+    /**
+     * Рендеринг изображения
+     */
+    private void renderImage(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
+        String imageUrl = element.getImageUrl();
+
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            log.warn("Пустой URL изображения");
+            return;
+        }
+
+        try {
+            // Загружаем изображение по URL
+            java.net.URL url = new java.net.URL(imageUrl);
+            byte[] imageBytes = url.openStream().readAllBytes();
+
+            com.itextpdf.io.image.ImageData imageData = com.itextpdf.io.image.ImageDataFactory.create(imageBytes);
+            com.itextpdf.layout.element.Image image = new com.itextpdf.layout.element.Image(imageData);
+
+            image.setFixedPosition(x, y);
+            image.scaleToFit(width, height);
+
+            if (rotation != null && rotation != 0) {
+                image.setRotationAngle(Math.toRadians(rotation));
+            }
+
+            canvas.add(image);
+        } catch (java.net.MalformedURLException e) {
+            log.error("Некорректный URL изображения: {}", imageUrl, e);
+        } catch (java.io.IOException e) {
+            log.error("Ошибка загрузки изображения по URL {}: {}", imageUrl, e.getMessage());
+        } catch (Exception e) {
+            log.error("Ошибка рендеринга изображения: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Рендеринг прямоугольника
+     */
+    private void renderRectangle(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
+        try {
+            PdfCanvas pdfCanvas = new PdfCanvas(canvas.getPdfDocument().getLastPage());
+
+            // Цвет заливки
+            String fillColor = element.getFillColor();
+            if (fillColor != null && !fillColor.isEmpty()) {
+                Color fill = parseColor(fillColor);
+                pdfCanvas.setFillColor(fill);
+            } else {
+                pdfCanvas.setFillColor(new DeviceRgb(255, 255, 255)); // белый по умолчанию
+            }
+
+            // Цвет и толщина границы
+            String borderColor = element.getBorderColor();
+            Integer borderWidth = element.getBorderWidth();
+
+            if (borderColor != null && !borderColor.isEmpty() && borderWidth != null && borderWidth > 0) {
+                Color border = parseColor(borderColor);
+                pdfCanvas.setStrokeColor(border);
+                pdfCanvas.setLineWidth(borderWidth.floatValue());
+            }
+
+            // Применяем rotation если нужно
+            if (rotation != null && rotation != 0) {
+                double radians = Math.toRadians(rotation);
+                float centerX = x + width / 2;
+                float centerY = y + height / 2;
+
+                pdfCanvas.saveState();
+                pdfCanvas.concatMatrix(
+                    (float) Math.cos(radians), (float) Math.sin(radians),
+                    (float) -Math.sin(radians), (float) Math.cos(radians),
+                    centerX - centerX * (float) Math.cos(radians) + centerY * (float) Math.sin(radians),
+                    centerY - centerX * (float) Math.sin(radians) - centerY * (float) Math.cos(radians)
+                );
+            }
+
+            // Рисуем прямоугольник
+            pdfCanvas.rectangle(x, y, width, height);
+
+            if (borderColor != null && !borderColor.isEmpty() && borderWidth != null && borderWidth > 0) {
+                pdfCanvas.fillStroke(); // заливка + обводка
+            } else {
+                pdfCanvas.fill(); // только заливка
+            }
+
+            if (rotation != null && rotation != 0) {
+                pdfCanvas.restoreState();
+            }
+
+        } catch (Exception e) {
+            log.error("Ошибка рендеринга прямоугольника: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Парсинг цвета из hex-строки (#RRGGBB или #RGB)
+     */
+    private Color parseColor(String colorStr) {
+        if (colorStr == null || colorStr.isEmpty()) {
+            return new DeviceRgb(0, 0, 0); // чёрный по умолчанию
+        }
+
+        try {
+            // Убираем # если есть
+            String hex = colorStr.startsWith("#") ? colorStr.substring(1) : colorStr;
+
+            // Поддержка короткой формы #RGB
+            if (hex.length() == 3) {
+                hex = String.valueOf(hex.charAt(0)) + hex.charAt(0) +
+                      hex.charAt(1) + hex.charAt(1) +
+                      hex.charAt(2) + hex.charAt(2);
+            }
+
+            if (hex.length() != 6) {
+                log.warn("Некорректный формат цвета: {}", colorStr);
+                return new DeviceRgb(0, 0, 0);
+            }
+
+            int r = Integer.parseInt(hex.substring(0, 2), 16);
+            int g = Integer.parseInt(hex.substring(2, 4), 16);
+            int b = Integer.parseInt(hex.substring(4, 6), 16);
+
+            return new DeviceRgb(r, g, b);
+        } catch (Exception e) {
+            log.error("Ошибка парсинга цвета {}: {}", colorStr, e.getMessage());
+            return new DeviceRgb(0, 0, 0);
         }
     }
 }

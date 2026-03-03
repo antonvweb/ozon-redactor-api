@@ -3,9 +3,13 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-.claude/
+/.claude
 /.mvn
 /.idea
+
+*.md
+
+nul
 
 ### STS ###
 .apt_generated

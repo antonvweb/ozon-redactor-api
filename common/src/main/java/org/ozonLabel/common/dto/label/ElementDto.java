@@ -44,4 +44,9 @@ public class ElementDto {
     private String dateFormat;
     private Boolean useCurrentDate;
     private DateSettingsDto dateSettings;
+
+    // Для RECTANGLE
+    private String fillColor;
+    private String borderColor;
+    private Integer borderWidth;
 }
