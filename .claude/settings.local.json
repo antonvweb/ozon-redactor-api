@@ -3,7 +3,18 @@
     "allow": [
       "Bash(dir:*)",
       "Bash(./mvnw compile:*)",
-      "Bash(mvn compile:*)"
+      "Bash(mvn compile:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(done)",
+      "Bash(xargs:*)",
+      "Bash(cd:*)",
+      "Bash(tree:*)",
+      "Bash(powershell -Command \"[Convert]::ToBase64String\\([System.Security.Cryptography.RandomNumberGenerator]::GetBytes\\(64\\)\\)\")",
+      "Bash(powershell:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(mvn clean compile:*)"
     ]
   }
 }

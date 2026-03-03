@@ -42,10 +42,6 @@ build/
 *.log
 
 ### Security - NEVER commit these! ###
-.env
-.env.local
-.env.*.local
-*.env
 application-local.properties
 application-local.yml
 secrets/
