@@ -3,8 +3,10 @@ package org.ozonLabel.ozonApi.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.datamatrix.DataMatrixCodeDto;
+import org.ozonLabel.common.dto.datamatrix.DataMatrixFileDto;
 import org.ozonLabel.common.dto.datamatrix.DataMatrixStatsDto;
 import org.ozonLabel.common.dto.datamatrix.DataMatrixUploadResponse;
+import org.ozonLabel.common.dto.datamatrix.DeleteFileResponse;
 import org.ozonLabel.common.service.datamatrix.DataMatrixService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -13,6 +15,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/datamatrix")
@@ -96,5 +100,99 @@ public class DataMatrixController {
 
         dataMatrixService.deleteCode(userEmail, companyOwnerId, codeId);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Получить историю файлов для продукта
+     */
+    @GetMapping("/product/{productId}/files")
+    public ResponseEntity<List<DataMatrixFileDto>> getFileHistory(
+            @PathVariable Long productId,
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Получение истории файлов для продукта {} компании {} пользователем {}",
+                productId, companyOwnerId, userEmail);
+
+        List<DataMatrixFileDto> files = dataMatrixService.getFileHistory(
+                userEmail, companyOwnerId, productId);
+        return ResponseEntity.ok(files);
+    }
+
+    /**
+     * Скачать оригинальный CSV файл
+     */
+    @GetMapping("/files/{fileId}/download")
+    public ResponseEntity<byte[]> downloadFileAsCSV(
+            @PathVariable Long fileId,
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Скачивание файла {} компании {} пользователем {}",
+                fileId, companyOwnerId, userEmail);
+
+        byte[] content = dataMatrixService.downloadFileAsCSV(userEmail, companyOwnerId, fileId);
+
+        DataMatrixFileDto fileInfo = dataMatrixService.getFileHistory(userEmail, companyOwnerId, null)
+                .stream()
+                .filter(f -> f.getId().equals(fileId))
+                .findFirst()
+                .orElse(null);
+
+        String fileName = fileInfo != null ? fileInfo.getFileName() : "codes.csv";
+
+        return ResponseEntity.ok()
+                .header("Content-Type", "text/csv; charset=UTF-8")
+                .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+                .body(content);
+    }
+
+    /**
+     * Скачать список дубликатов как CSV
+     */
+    @GetMapping("/files/{fileId}/download-duplicates")
+    public ResponseEntity<byte[]> downloadDuplicatesAsCSV(
+            @PathVariable Long fileId,
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Скачивание дубликатов файла {} компании {} пользователем {}",
+                fileId, companyOwnerId, userEmail);
+
+        byte[] content = dataMatrixService.downloadDuplicatesAsCSV(userEmail, companyOwnerId, fileId);
+
+        DataMatrixFileDto fileInfo = dataMatrixService.getFileHistory(userEmail, companyOwnerId, null)
+                .stream()
+                .filter(f -> f.getId().equals(fileId))
+                .findFirst()
+                .orElse(null);
+
+        String fileName = fileInfo != null ? 
+                "duplicates_" + fileInfo.getFileName() : "duplicates.csv";
+
+        return ResponseEntity.ok()
+                .header("Content-Type", "text/csv; charset=UTF-8")
+                .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+                .body(content);
+    }
+
+    /**
+     * Удалить файл с кодами
+     */
+    @DeleteMapping("/files/{fileId}")
+    public ResponseEntity<DeleteFileResponse> deleteFile(
+            @PathVariable Long fileId,
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Удаление файла {} компании {} пользователем {}",
+                fileId, companyOwnerId, userEmail);
+
+        DeleteFileResponse response = dataMatrixService.deleteFile(userEmail, companyOwnerId, fileId);
+        return ResponseEntity.ok(response);
     }
 }

@@ -21,7 +21,9 @@ public class CreateFolderDto {
     private Long parentFolderId;
     private String color;
     private String icon;
-    
+
     @Builder.Default
     private SourceType sourceType = SourceType.MANUAL;
+
+    private Boolean isTemplate;
 }

@@ -28,6 +28,7 @@ import org.ozonLabel.common.service.datamatrix.DataMatrixService;
 import org.ozonLabel.common.service.label.LabelService;
 import org.ozonLabel.common.service.label.PrintService;
 import org.ozonLabel.common.service.user.CompanyService;
+import org.ozonLabel.ozonApi.util.DateCalculator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,14 +50,19 @@ public class PrintServiceImpl implements PrintService {
     private final LabelService labelService;
     private final CompanyService companyService;
     private final DataMatrixService dataMatrixService;
+    private final DateCalculator dateCalculator;
 
     // Константы для конвертации мм в пункты (1 мм ≈ 2.835 pt при 72 dpi)
     private static final double MM_TO_POINTS = 2.83464567;
 
     @Override
-    @Transactional(readOnly = true)
-    public byte[] generateLabelsPdf(String userEmail, Long companyOwnerId, PrintRequest request) {
+    @Transactional
+    public PrintResponse generateLabelsPdf(String userEmail, Long companyOwnerId, PrintRequest request) {
         companyService.checkAccess(userEmail, companyOwnerId);
+
+        int totalLabels = 0;
+        int dataMatrixCodesUsed = 0;
+        List<Long> productsMissingDmCodes = new ArrayList<>();
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             PdfWriter writer = new PdfWriter(baos);
@@ -85,7 +91,13 @@ public class PrintServiceImpl implements PrintService {
                         addSeparator(pdf, separatorType);
                     }
 
-                    generateLabelPage(pdf, label, companyOwnerId, productId);
+                    totalLabels++;
+                    int[] codesUsedInfo = generateLabelPage(pdf, label, userEmail, companyOwnerId, productId);
+                    dataMatrixCodesUsed += codesUsedInfo[0];
+                    if (codesUsedInfo[1] > 0) {
+                        productsMissingDmCodes.add(productId);
+                    }
+
                     firstLabel = false;
                 }
 
@@ -93,8 +105,16 @@ public class PrintServiceImpl implements PrintService {
             }
 
             pdf.close();
-            log.info("Сгенерирован PDF с этикетками для {} продуктов", productIds.size());
-            return baos.toByteArray();
+            log.info("Сгенерирован PDF с этикетками для {} продуктов, всего страниц: {}, списано DataMatrix кодов: {}",
+                    productIds.size(), totalLabels, dataMatrixCodesUsed);
+
+            return PrintResponse.builder()
+                    .pdfData(baos.toByteArray())
+                    .totalLabels(totalLabels)
+                    .dataMatrixCodesUsed(dataMatrixCodesUsed)
+                    .productsMissingDmCodes(productsMissingDmCodes)
+                    .build();
+
         } catch (Exception e) {
             log.error("Ошибка генерации PDF: {}", e.getMessage(), e);
             throw new ValidationException("Ошибка генерации PDF: " + e.getMessage());
@@ -144,13 +164,16 @@ public class PrintServiceImpl implements PrintService {
         }
     }
 
-    private void generateLabelPage(PdfDocument pdf, LabelResponseDto label, Long companyOwnerId, Long productId) {
+    private int[] generateLabelPage(PdfDocument pdf, LabelResponseDto label, String userEmail, Long companyOwnerId, Long productId) {
         float widthPt = label.getWidth().floatValue() * (float) MM_TO_POINTS;
         float heightPt = label.getHeight().floatValue() * (float) MM_TO_POINTS;
 
         PdfPage page = pdf.addNewPage(new PageSize(widthPt, heightPt));
         PdfCanvas pdfCanvas = new PdfCanvas(page);
         Canvas canvas = new Canvas(pdfCanvas, page.getPageSize());
+
+        int dataMatrixCodesUsed = 0;
+        int missingCodesCount = 0;
 
         try {
             LabelConfigDto config = label.getConfig();
@@ -162,7 +185,9 @@ public class PrintServiceImpl implements PrintService {
                 if (element.getVisible() != null && !element.getVisible()) {
                     continue;
                 }
-                renderElement(canvas, element, config, companyOwnerId, productId);
+                int[] renderResult = renderElement(canvas, element, config, userEmail, companyOwnerId, productId);
+                dataMatrixCodesUsed += renderResult[0];
+                missingCodesCount += renderResult[1];
             }
 
         } catch (Exception e) {
@@ -170,9 +195,11 @@ public class PrintServiceImpl implements PrintService {
         } finally {
             canvas.close();
         }
+
+        return new int[]{dataMatrixCodesUsed, missingCodesCount};
     }
 
-    private void renderElement(Canvas canvas, ElementDto element, LabelConfigDto config, Long companyOwnerId, Long productId) {
+    private int[] renderElement(Canvas canvas, ElementDto element, LabelConfigDto config, String userEmail, Long companyOwnerId, Long productId) {
         String type = element.getType();
 
         float x = element.getX().floatValue() * (float) MM_TO_POINTS;
@@ -183,6 +210,9 @@ public class PrintServiceImpl implements PrintService {
         // Получаем rotation (по умолчанию 0)
         Integer rotation = element.getRotation() != null ? element.getRotation().intValue() : 0;
 
+        int dataMatrixCodesUsed = 0;
+        int missingCodesCount = 0;
+
         switch (type) {
             case "text":
                 renderText(canvas, element, x, y, width, height, rotation);
@@ -191,7 +221,9 @@ public class PrintServiceImpl implements PrintService {
                 renderBarcode(canvas, element, x, y, width, height, rotation);
                 break;
             case "datamatrix":
-                renderDataMatrix(canvas, element, x, y, width, height, companyOwnerId, productId);
+                int[] dmResult = renderDataMatrix(canvas, element, x, y, width, height, userEmail, companyOwnerId, productId);
+                dataMatrixCodesUsed += dmResult[0];
+                missingCodesCount += dmResult[1];
                 break;
             case "qrcode":
                 renderQRCode(canvas, element, x, y, width, height);
@@ -206,6 +238,8 @@ public class PrintServiceImpl implements PrintService {
                 renderRectangle(canvas, element, x, y, width, height, rotation);
                 break;
         }
+
+        return new int[]{dataMatrixCodesUsed, missingCodesCount};
     }
 
     private void renderText(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
@@ -380,28 +414,70 @@ public class PrintServiceImpl implements PrintService {
         }
     }
 
-    private void renderDataMatrix(Canvas canvas, ElementDto element, float x, float y, float width, float height, Long companyOwnerId, Long productId) {
+    private int[] renderDataMatrix(Canvas canvas, ElementDto element, float x, float y, float width, float height,
+                                    String userEmail, Long companyOwnerId, Long productId) {
         try {
-            Optional<String> codeOpt = dataMatrixService.reserveNextCodeForProduct("system", companyOwnerId, productId);
-            
+            Optional<String> codeOpt = dataMatrixService.reserveNextCodeForProduct(userEmail, companyOwnerId, productId);
+
             if (codeOpt.isEmpty()) {
-                throw new ValidationException("Недостаточно кодов ЧЗ для продукта " + productId);
+                log.warn("Нет доступных DataMatrix кодов для продукта {}", productId);
+                // Рисуем заглушку - пустой квадрат с текстом "Нет кода"
+                drawDataMatrixPlaceholder(canvas, x, y, width, height);
+                return new int[]{0, 1};
             }
 
             String code = codeOpt.get();
             byte[] dmImage = generateDataMatrixImage(code, (int) width, (int) height);
-            
+
             if (dmImage != null) {
                 com.itextpdf.layout.element.Image img = new com.itextpdf.layout.element.Image(
                     com.itextpdf.io.image.ImageDataFactory.create(dmImage));
                 img.setFixedPosition(x, y);
                 img.scaleToFit(width, height);
                 canvas.add(img);
+                return new int[]{1, 0};
             }
-        } catch (ValidationException e) {
-            throw e;
+
+            return new int[]{0, 0};
+
         } catch (Exception e) {
-            log.error("Ошибка рендеринга DataMatrix: {}", e.getMessage());
+            log.error("Ошибка рендеринга DataMatrix: {}", e.getMessage(), e);
+            return new int[]{0, 0};
+        }
+    }
+
+    /**
+     * Рисует заглушку вместо DataMatrix кода (пустой квадрат с текстом "Нет кода")
+     */
+    private void drawDataMatrixPlaceholder(Canvas canvas, float x, float y, float width, float height) {
+        try {
+            PdfCanvas pdfCanvas = new PdfCanvas(canvas.getPdfDocument().getLastPage());
+
+            // Рисуем контур квадрата
+            pdfCanvas.setStrokeColor(new DeviceRgb(200, 200, 200));
+            pdfCanvas.setLineWidth(1);
+            pdfCanvas.rectangle(x, y, width, height);
+            pdfCanvas.stroke();
+
+            // Добавляем текст "Нет кода" по центру
+            PdfFont font = PdfFontFactory.createFont(StandardFonts.HELVETICA);
+            com.itextpdf.layout.element.Text text = new com.itextpdf.layout.element.Text("Нет кода")
+                    .setFont(font)
+                    .setFontSize(8)
+                    .setFontColor(new DeviceRgb(150, 150, 150));
+
+            Paragraph paragraph = new Paragraph(text)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setVerticalAlignment(com.itextpdf.layout.properties.VerticalAlignment.MIDDLE);
+
+            // Вычисляем позицию для центрирования текста
+            float textX = x + width / 2;
+            float textY = y + height / 2 - 4; // небольшая коррекция
+
+            canvas.showTextAligned(paragraph, textX, textY, TextAlignment.CENTER);
+
+        } catch (Exception e) {
+            log.error("Ошибка рисования заглушки DataMatrix: {}", e.getMessage());
         }
     }
 
@@ -433,28 +509,159 @@ public class PrintServiceImpl implements PrintService {
 
     private void renderDate(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
         DateSettingsDto dateSettings = element.getDateSettings();
-        String content = element.getContent();
 
-        if (dateSettings != null && dateSettings.getUseCurrentDate() != null && dateSettings.getUseCurrentDate()) {
-            LocalDate now = LocalDate.now();
-            String format = dateSettings.getFormat() != null ? dateSettings.getFormat() : "DD.MM.YYYY";
-
-            DateTimeFormatter formatter = switch (format) {
-                case "DD.MM.YYYY" -> DateTimeFormatter.ofPattern("dd.MM.yyyy");
-                case "DD.MM.GG" -> DateTimeFormatter.ofPattern("dd.MM.yy");
-                case "YYYY-MM-DD" -> DateTimeFormatter.ofPattern("yyyy-MM-dd");
-                default -> DateTimeFormatter.ofPattern("dd.MM.yyyy");
-            };
-
-            content = now.format(formatter);
+        // Fallback: если dateSettings == null, рендерим content как текст
+        if (dateSettings == null) {
+            renderText(canvas, element, x, y, width, height, rotation);
+            return;
         }
 
-        ElementDto textElement = ElementDto.builder()
-                .content(content)
-                .style(element.getStyle())
-                .build();
+        // Определяем дату изготовления
+        LocalDate manufactureDate;
+        Boolean smartDate = dateSettings.getSmartDate();
+        String customDate = dateSettings.getCustomDate();
 
-        renderText(canvas, textElement, x, y, width, height, rotation);
+        if (smartDate != null && smartDate) {
+            // Умная дата: дата изготовления = дата печати
+            manufactureDate = LocalDate.now();
+        } else if (customDate != null && !customDate.isEmpty()) {
+            // Обычная дата: из customDate
+            try {
+                manufactureDate = LocalDate.parse(customDate);
+            } catch (Exception e) {
+                log.warn("Некорректная customDate: {}, используем текущую дату", customDate);
+                manufactureDate = LocalDate.now();
+            }
+        } else {
+            // Fallback: используем content как есть (уже отформатировано фронтендом)
+            renderText(canvas, element, x, y, width, height, rotation);
+            return;
+        }
+
+        // Расчёт даты «годен до» (только для умной даты)
+        LocalDate bestBefore = null;
+        if (smartDate != null && smartDate) {
+            Integer shelfLifeValue = dateSettings.getShelfLifeValue();
+            String shelfLifeUnit = dateSettings.getShelfLifeUnit();
+            bestBefore = dateCalculator.calculateBestBefore(manufactureDate, shelfLifeValue, shelfLifeUnit);
+        }
+
+        // Получаем форматтер
+        String format = dateSettings.getFormat() != null ? dateSettings.getFormat() : "DD.MM.YYYY";
+        DateTimeFormatter formatter = dateCalculator.getFormatter(format);
+
+        // Формируем текст по чекбоксам
+        List<String> lines = new ArrayList<>();
+        Boolean abbreviateText = dateSettings.getAbbreviateText();
+
+        // Дата изготовления
+        if (dateSettings.getShowManufactureDate() != null && dateSettings.getShowManufactureDate()) {
+            String label = abbreviateText != null && abbreviateText ? "Дата изг.: " : "Дата изготовления: ";
+            lines.add(label + manufactureDate.format(formatter));
+        }
+
+        // Годен до (только для умной даты)
+        if (smartDate != null && smartDate && 
+            dateSettings.getShowBestBefore() != null && dateSettings.getShowBestBefore() && 
+            bestBefore != null) {
+            String label = abbreviateText != null && abbreviateText ? "Годен до: " : "Годен до: ";
+            lines.add(label + bestBefore.format(formatter));
+        }
+
+        // Срок годности
+        if (dateSettings.getShowShelfLife() != null && dateSettings.getShowShelfLife()) {
+            String label = abbreviateText != null && abbreviateText ? "Ср. годн.: " : "Срок годности: ";
+            String shelfLifeFormatted = dateCalculator.formatShelfLife(
+                dateSettings.getShelfLifeValue(), 
+                dateSettings.getShelfLifeUnit()
+            );
+            lines.add(label + shelfLifeFormatted);
+        }
+
+        // Если ни один чекбокс не выбран, рендерим content как есть
+        if (lines.isEmpty()) {
+            renderText(canvas, element, x, y, width, height, rotation);
+            return;
+        }
+
+        // Рендеринг
+        if (lines.size() == 1) {
+            // Одна строка — рендерим через renderText
+            ElementDto textElement = ElementDto.builder()
+                    .content(lines.get(0))
+                    .style(element.getStyle())
+                    .build();
+            renderText(canvas, textElement, x, y, width, height, rotation);
+        } else {
+            // Многострочный рендеринг через PdfCanvas напрямую
+            renderMultiLineText(canvas, element, lines, x, y, width, height, rotation);
+        }
+    }
+
+    /**
+     * Рендеринг многострочного текста для дат.
+     * Каждая строка со смещением по Y = lineHeight (fontSize * 1.2).
+     */
+    private void renderMultiLineText(Canvas canvas, ElementDto element, List<String> lines,
+                                      float x, float y, float width, float height, Integer rotation) {
+        try {
+            TextStyleDto style = element.getStyle();
+            if (style == null) {
+                style = TextStyleDto.builder().build();
+            }
+
+            PdfFont font = createFont(style);
+            float fontSize = style.getFontSize() != null ? style.getFontSize().floatValue() : 12;
+            float lineHeight = fontSize * 1.2f;
+
+            PdfCanvas pdfCanvas = new PdfCanvas(canvas.getPdfDocument().getLastPage());
+
+            float currentY = y + height - lineHeight; // начинаем сверху с отступом
+
+            for (String line : lines) {
+                if (currentY < y) {
+                    break; // вышли за пределы элемента
+                }
+
+                // Выравнивание текста
+                float textX = x;
+                String textAlign = style.getTextAlign();
+                if ("center".equals(textAlign)) {
+                    textX = x + width / 2;
+                } else if ("right".equals(textAlign)) {
+                    textX = x + width;
+                }
+
+                // Рендеринг строки
+                pdfCanvas.beginText();
+                pdfCanvas.setFontAndSize(font, fontSize);
+                pdfCanvas.setFillColor(parseColor(style.getColor() != null ? style.getColor() : "#000000"));
+                
+                if ("center".equals(textAlign)) {
+                    float textWidth = font.getWidth(line, fontSize);
+                    pdfCanvas.moveText(textX - (textWidth / 2), currentY);
+                } else if ("right".equals(textAlign)) {
+                    float textWidth = font.getWidth(line, fontSize);
+                    pdfCanvas.moveText(textX - textWidth, currentY);
+                } else {
+                    pdfCanvas.moveText(textX, currentY);
+                }
+                
+                pdfCanvas.showText(line);
+                pdfCanvas.endText();
+
+                currentY -= lineHeight;
+            }
+
+        } catch (Exception e) {
+            log.error("Ошибка многострочного рендеринга даты: {}", e.getMessage());
+            // Fallback: рендерим первую строку
+            ElementDto textElement = ElementDto.builder()
+                    .content(lines.get(0))
+                    .style(element.getStyle())
+                    .build();
+            renderText(canvas, textElement, x, y, width, height, rotation);
+        }
     }
 
     private void addSeparator(PdfDocument pdf, String separatorType) {

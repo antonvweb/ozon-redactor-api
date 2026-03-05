@@ -38,6 +38,21 @@ public interface FolderService {
     // Обновление данных папки (ресинхронизация)
     void refreshFolder(String userEmail, Long companyOwnerId, Long folderId);
 
+    // Переключение шаблона папки
+    FolderResponseDto toggleTemplate(String userEmail, Long companyOwnerId, Long folderId, Boolean isTemplate);
+
+    // Получение статистики DataMatrix по папке
+    FolderDataMatrixStats getFolderDataMatrixStats(String userEmail, Long companyOwnerId, Long folderId);
+
+    // Загрузка заказа для печати из Excel
+    OrderUploadResult uploadPrintOrder(String userEmail, Long companyOwnerId, org.springframework.web.multipart.MultipartFile file);
+
+    // Разрешение неоднозначностей при загрузке заказа
+    void resolvePrintOrder(String userEmail, Long companyOwnerId, ResolveOrderRequest request);
+
+    // Получение папок по типу источника
+    List<FolderResponseDto> getFoldersBySourceType(String userEmail, Long companyOwnerId, String sourceType);
+
     List<FolderResponseDto> findByUserIdAndParentFolderIdIsNullOrderByPositionAsc(Long userId);
     List<FolderResponseDto> findByUserIdAndParentFolderIdOrderByPositionAsc(Long userId, Long parentFolderId);
     List<FolderResponseDto> findByUserIdOrderByPositionAsc(Long userId);

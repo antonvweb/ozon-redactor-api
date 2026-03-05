@@ -32,4 +32,9 @@ public class PrintRequest {
      * DARK - тёмная полоса, LIGHT - светлая полоса, NONE - без разделителя
      */
     private String separatorType;
+
+    /**
+     * URL кастомного изображения разделителя (Pro тариф)
+     */
+    private String customSeparatorImageUrl;
 }

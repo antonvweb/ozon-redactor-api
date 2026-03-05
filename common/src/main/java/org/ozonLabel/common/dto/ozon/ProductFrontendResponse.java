@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.ozonLabel.common.dto.datamatrix.DataMatrixStatsDto;
 
 import java.util.List;
 
@@ -29,4 +30,9 @@ public class ProductFrontendResponse {
     private Integer stock;
     private String color;
     private List<String> tags;
+
+    // Task 9: новые поля
+    private Integer printQuantity;   // количество копий для печати, default 1
+    private Boolean hasLabel;        // true если у товара есть этикетка в системе
+    private DataMatrixStatsDto dataMatrixStats;  // статистика DataMatrix {total, remaining, used}
 }

@@ -61,5 +61,9 @@ public interface OzonService {
     Page<ProductInfo> searchProductsInFolder(Long userId, Long folderId, String searchTerm, Pageable pageable);
 
     ProductInfo saveProduct(ProductInfo productInfo);
+    
+    // ==== Task 9: Управление количеством для печати ====
+    ProductInfo updatePrintQuantity(Long userId, Long productId, Integer quantity);
+    int bulkUpdateQuantity(List<Long> productIds, Long userId, Integer quantity);
 }
 

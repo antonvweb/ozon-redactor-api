@@ -52,6 +52,9 @@ public class DataMatrixCode {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "file_id")
+    private Long fileId;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

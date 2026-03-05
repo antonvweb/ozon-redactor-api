@@ -5,14 +5,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
-import org.ozonLabel.common.dto.datamatrix.DataMatrixCodeDto;
-import org.ozonLabel.common.dto.datamatrix.DataMatrixStatsDto;
-import org.ozonLabel.common.dto.datamatrix.DataMatrixUploadResponse;
+import org.ozonLabel.common.dto.datamatrix.*;
 import org.ozonLabel.common.exception.user.ValidationException;
 import org.ozonLabel.common.service.datamatrix.DataMatrixService;
 import org.ozonLabel.common.service.user.CompanyService;
 import org.ozonLabel.ozonApi.entity.DataMatrixCode;
+import org.ozonLabel.ozonApi.entity.DataMatrixFile;
 import org.ozonLabel.ozonApi.repository.DataMatrixCodeRepository;
+import org.ozonLabel.ozonApi.repository.DataMatrixFileRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -27,6 +27,7 @@ import javax.imageio.ImageIO;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +39,7 @@ public class DataMatrixServiceImpl implements DataMatrixService {
 
     private final DataMatrixCodeRepository dataMatrixCodeRepository;
     private final CompanyService companyService;
+    private final DataMatrixFileRepository dataMatrixFileRepository;
 
     // ASCII коды для GS1
     private static final char FNC1 = (char) 232;  // FNC1 для DataMatrix
@@ -51,20 +53,20 @@ public class DataMatrixServiceImpl implements DataMatrixService {
             Long productId,
             MultipartFile file,
             boolean checkDuplicates) {
-        
+
         companyService.checkAccess(userEmail, companyOwnerId);
-        
+
         String fileName = file.getOriginalFilename();
         if (fileName == null) {
             throw new ValidationException("Имя файла не указано");
         }
-        
-        List<String> codes;
+
+        List<String> allCodes;
         try {
             if (fileName.toLowerCase().endsWith(".pdf")) {
-                codes = parsePdf(file.getInputStream());
+                allCodes = parsePdf(file.getInputStream());
             } else if (fileName.toLowerCase().endsWith(".csv")) {
-                codes = parseCsv(file.getInputStream());
+                allCodes = parseCsv(file.getInputStream());
             } else {
                 throw new ValidationException("Неподдерживаемый формат файла. Используйте PDF или CSV");
             }
@@ -72,23 +74,59 @@ public class DataMatrixServiceImpl implements DataMatrixService {
             log.error("Ошибка при чтении файла: {}", e.getMessage());
             throw new ValidationException("Ошибка при чтении файла: " + e.getMessage());
         }
-        
-        int total = codes.size();
+
+        int total = allCodes.size();
         int duplicates = 0;
-        int newCodes = 0;
+        int newCodesCount = 0;
         List<String> uploadedCodes = new ArrayList<>();
+        List<String> duplicateSourceFiles = new ArrayList<>();
         
-        for (String code : codes) {
+        // Сохраняем originalContent - все коды из файла (до фильтрации)
+        StringBuilder originalContentBuilder = new StringBuilder();
+        for (String code : allCodes) {
+            if (!code.trim().isEmpty()) {
+                originalContentBuilder.append(code.trim()).append("\n");
+            }
+        }
+        String originalContent = originalContentBuilder.toString();
+
+        // Удаляем файлы старше 1 года
+        LocalDateTime oneYearAgo = LocalDateTime.now().minusYears(1);
+        List<DataMatrixFile> oldFiles = dataMatrixFileRepository.findOldFiles(companyOwnerId, oneYearAgo);
+        if (!oldFiles.isEmpty()) {
+            List<Long> oldFileIds = oldFiles.stream().map(DataMatrixFile::getId).toList();
+            for (Long oldFileId : oldFileIds) {
+                dataMatrixCodeRepository.deleteAllByFileId(oldFileId);
+            }
+            dataMatrixFileRepository.deleteAll(oldFiles);
+            log.info("Удалено {} старых файлов (>1 года) для компании {}", oldFiles.size(), companyOwnerId);
+        }
+
+        // Создаём запись файла
+        DataMatrixFile dataMatrixFile = DataMatrixFile.builder()
+                .companyId(companyOwnerId)
+                .userId(companyOwnerId)
+                .productId(productId)
+                .fileName(fileName)
+                .uploadedAt(LocalDateTime.now())
+                .totalCodes(total)
+                .duplicateCount(0) // посчитаем позже
+                .originalContent(originalContent)
+                .build();
+        dataMatrixFile = dataMatrixFileRepository.save(dataMatrixFile);
+        Long fileId = dataMatrixFile.getId();
+
+        for (String code : allCodes) {
             String trimmedCode = code.trim();
             if (trimmedCode.isEmpty()) {
                 continue;
             }
-            
+
             // Проверка на дубликат
             if (checkDuplicates && dataMatrixCodeRepository.existsByCompanyIdAndCode(companyOwnerId, trimmedCode)) {
                 duplicates++;
-                
-                // Помечаем как дубликат
+
+                // Помечаем как дубликат и собираем имена файлов-источников
                 Optional<DataMatrixCode> existingOpt = dataMatrixCodeRepository.findByCompanyIdAndCode(companyOwnerId, trimmedCode);
                 if (existingOpt.isPresent()) {
                     DataMatrixCode existing = existingOpt.get();
@@ -96,14 +134,24 @@ public class DataMatrixServiceImpl implements DataMatrixService {
                         existing.setIsDuplicate(true);
                         dataMatrixCodeRepository.save(existing);
                     }
+                    // Находим файл-источник дубликата
+                    if (existing.getFileId() != null) {
+                        Optional<DataMatrixFile> sourceFileOpt = dataMatrixFileRepository.findById(existing.getFileId());
+                        if (sourceFileOpt.isPresent()) {
+                            String sourceFileName = sourceFileOpt.get().getFileName();
+                            if (!duplicateSourceFiles.contains(sourceFileName)) {
+                                duplicateSourceFiles.add(sourceFileName);
+                            }
+                        }
+                    }
                 }
                 continue;
             }
-            
+
             // Парсинг GS1 кода
             GS1DataMatrixResult parsed = parseGS1Code(trimmedCode);
-            
-            // Сохранение нового кода
+
+            // Сохранение нового кода с fileId
             DataMatrixCode dataMatrixCode = DataMatrixCode.builder()
                     .userId(companyOwnerId)
                     .companyId(companyOwnerId)
@@ -113,21 +161,28 @@ public class DataMatrixServiceImpl implements DataMatrixService {
                     .serial(parsed.serial())
                     .isUsed(false)
                     .isDuplicate(false)
+                    .fileId(fileId)
                     .build();
-            
+
             dataMatrixCodeRepository.save(dataMatrixCode);
             uploadedCodes.add(trimmedCode);
-            newCodes++;
+            newCodesCount++;
         }
-        
-        log.info("Загружено кодов: всего={}, новых={}, дубликатов={} для productId={}", 
-                total, newCodes, duplicates, productId);
-        
+
+        // Обновляем duplicateCount в файле
+        dataMatrixFile.setDuplicateCount(duplicates);
+        dataMatrixFileRepository.save(dataMatrixFile);
+
+        log.info("Загружено кодов: всего={}, новых={}, дубликатов={} для productId={}, fileId={}",
+                total, newCodesCount, duplicates, productId, fileId);
+
         return DataMatrixUploadResponse.builder()
                 .total(total)
-                .newCodes(newCodes)
+                .newCodes(newCodesCount)
                 .duplicates(duplicates)
                 .codes(uploadedCodes)
+                .duplicateSourceFiles(duplicateSourceFiles)
+                .uploadedFileId(fileId)
                 .build();
     }
 
@@ -346,6 +401,130 @@ public class DataMatrixServiceImpl implements DataMatrixService {
                 .isDuplicate(code.getIsDuplicate())
                 .usedAt(code.getUsedAt())
                 .createdAt(code.getCreatedAt())
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DataMatrixFileDto> getFileHistory(
+            String userEmail,
+            Long companyOwnerId,
+            Long productId) {
+
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        List<DataMatrixFile> files = dataMatrixFileRepository.findByCompanyIdAndProductIdOrderByUploadedAtDesc(companyOwnerId, productId);
+
+        return files.stream()
+                .map(this::mapToFileDto)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] downloadFileAsCSV(
+            String userEmail,
+            Long companyOwnerId,
+            Long fileId) {
+
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        DataMatrixFile file = dataMatrixFileRepository.findById(fileId)
+                .orElseThrow(() -> new ValidationException("Файл не найден"));
+
+        if (!file.getCompanyId().equals(companyOwnerId)) {
+            throw new ValidationException("Доступ запрещён");
+        }
+
+        if (file.getOriginalContent() == null) {
+            throw new ValidationException("Содержимое файла недоступно");
+        }
+
+        return file.getOriginalContent().getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] downloadDuplicatesAsCSV(
+            String userEmail,
+            Long companyOwnerId,
+            Long fileId) {
+
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        DataMatrixFile file = dataMatrixFileRepository.findById(fileId)
+                .orElseThrow(() -> new ValidationException("Файл не найден"));
+
+        if (!file.getCompanyId().equals(companyOwnerId)) {
+            throw new ValidationException("Доступ запрещён");
+        }
+
+        List<DataMatrixCode> duplicateCodes = dataMatrixCodeRepository.findByFileId(fileId)
+                .stream()
+                .filter(DataMatrixCode::getIsDuplicate)
+                .toList();
+
+        StringBuilder csvBuilder = new StringBuilder();
+        for (DataMatrixCode code : duplicateCodes) {
+            csvBuilder.append(code.getCode()).append("\n");
+        }
+
+        return csvBuilder.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    @Transactional
+    public DeleteFileResponse deleteFile(
+            String userEmail,
+            Long companyOwnerId,
+            Long fileId) {
+
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        DataMatrixFile file = dataMatrixFileRepository.findById(fileId)
+                .orElseThrow(() -> new ValidationException("Файл не найден"));
+
+        if (!file.getCompanyId().equals(companyOwnerId)) {
+            throw new ValidationException("Доступ запрещён");
+        }
+
+        // Находим все коды файла
+        List<DataMatrixCode> fileCodes = dataMatrixCodeRepository.findByFileId(fileId);
+        int deletedCodes = fileCodes.size();
+
+        // Удаляем все коды файла
+        dataMatrixCodeRepository.deleteAllByFileId(fileId);
+
+        // Пересчитываем дубликаты: находим коды, у которых isDuplicate=true,
+        // но теперь в пуле осталась только 1 запись с таким значением
+        List<String> orphanDuplicateCodes = dataMatrixCodeRepository.findOrphanDuplicateCodes(companyOwnerId);
+        int resolvedDuplicates = orphanDuplicateCodes.size();
+
+        if (!orphanDuplicateCodes.isEmpty()) {
+            dataMatrixCodeRepository.clearDuplicateFlag(companyOwnerId, orphanDuplicateCodes);
+        }
+
+        // Удаляем файл
+        dataMatrixFileRepository.delete(file);
+
+        log.info("Удалён файл {} с {} кодами, снято {} дубликатов пользователем {}",
+                fileId, deletedCodes, resolvedDuplicates, userEmail);
+
+        return DeleteFileResponse.builder()
+                .deletedCodes(deletedCodes)
+                .resolvedDuplicates(resolvedDuplicates)
+                .message("Файл успешно удалён")
+                .build();
+    }
+
+    private DataMatrixFileDto mapToFileDto(DataMatrixFile file) {
+        return DataMatrixFileDto.builder()
+                .id(file.getId())
+                .fileName(file.getFileName())
+                .uploadedAt(file.getUploadedAt())
+                .totalCodes(file.getTotalCodes())
+                .duplicateCount(file.getDuplicateCount())
+                .duplicateSources(new ArrayList<>()) // Можно расширить при необходимости
                 .build();
     }
 }

@@ -181,6 +181,14 @@ public class OzonProduct {
     @JoinColumn(name = "user_id", insertable = false, updatable = false)
     private User owner;
 
+    @Column(name = "excel_data", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String excelData;
+
+    @Column(name = "print_quantity")
+    @Builder.Default
+    private Integer printQuantity = 1;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

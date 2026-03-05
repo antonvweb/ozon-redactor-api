@@ -9,6 +9,7 @@ import org.ozonLabel.common.service.ozon.FolderService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -179,5 +180,88 @@ public class FolderController {
 
         folderService.refreshFolder(userEmail, companyOwnerId, folderId);
         return ResponseEntity.ok(ApiResponse.success("Папка успешно обновлена"));
+    }
+
+    /**
+     * Переключить шаблон папки
+     */
+    @PatchMapping("/{folderId}/template")
+    public ResponseEntity<FolderResponseDto> toggleTemplate(
+            @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
+            @RequestParam Boolean isTemplate,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Переключение шаблона папки {} компании {} пользователем {}",
+                folderId, companyOwnerId, userEmail);
+
+        FolderResponseDto response = folderService.toggleTemplate(userEmail, companyOwnerId, folderId, isTemplate);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Получить статистику DataMatrix по папке
+     */
+    @GetMapping("/{folderId}/datamatrix-stats")
+    public ResponseEntity<FolderDataMatrixStats> getFolderDataMatrixStats(
+            @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Получение статистики DataMatrix папки {} компании {} пользователем {}",
+                folderId, companyOwnerId, userEmail);
+
+        FolderDataMatrixStats stats = folderService.getFolderDataMatrixStats(userEmail, companyOwnerId, folderId);
+        return ResponseEntity.ok(stats);
+    }
+
+    /**
+     * Загрузить заказ для печати из Excel
+     */
+    @PostMapping("/print/order-upload")
+    public ResponseEntity<OrderUploadResult> uploadPrintOrder(
+            @RequestParam Long companyOwnerId,
+            @RequestParam("file") MultipartFile file,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Загрузка заказа для печати компанией {} пользователем {}", companyOwnerId, userEmail);
+
+        OrderUploadResult result = folderService.uploadPrintOrder(userEmail, companyOwnerId, file);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Разрешить неоднозначности штрихкодов при загрузке заказа
+     */
+    @PostMapping("/print/order-resolve")
+    public ResponseEntity<ApiResponse> resolvePrintOrder(
+            @RequestParam Long companyOwnerId,
+            @RequestBody ResolveOrderRequest request,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Разрешение неоднозначностей заказа компанией {} пользователем {}", companyOwnerId, userEmail);
+
+        folderService.resolvePrintOrder(userEmail, companyOwnerId, request);
+        return ResponseEntity.ok(ApiResponse.success("Неоднозначности разрешены"));
+    }
+
+    /**
+     * Получить папки по типу источника
+     */
+    @GetMapping("/by-source/{sourceType}")
+    public ResponseEntity<List<FolderResponseDto>> getFoldersBySourceType(
+            @PathVariable String sourceType,
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Получение папок типа {} компании {} пользователем {}", sourceType, companyOwnerId, userEmail);
+
+        List<FolderResponseDto> folders = folderService.getFoldersBySourceType(userEmail, companyOwnerId, sourceType);
+        return ResponseEntity.ok(folders);
     }
 }

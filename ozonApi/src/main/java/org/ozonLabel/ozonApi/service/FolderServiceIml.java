@@ -10,12 +10,14 @@ import org.ozonLabel.common.service.ozon.FolderService;
 import org.ozonLabel.common.service.user.CompanyService;
 import org.ozonLabel.ozonApi.entity.OzonProduct;
 import org.ozonLabel.ozonApi.entity.ProductFolder;
+import org.ozonLabel.ozonApi.repository.DataMatrixCodeRepository;
 import org.ozonLabel.ozonApi.repository.OzonProductRepository;
 import org.ozonLabel.ozonApi.repository.ProductFolderRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +35,8 @@ import org.ozonLabel.ozonApi.entity.Label;
 import org.ozonLabel.ozonApi.repository.LabelRepository;
 import org.ozonLabel.ozonApi.service.OzonServiceIml;
 import org.ozonLabel.common.dto.ozon.SyncProductsRequest;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +49,7 @@ public class FolderServiceIml implements FolderService {
     private final CompanyService companyService;
     private final ObjectMapper objectMapper;
     private final OzonServiceIml ozonService;
+    private final DataMatrixCodeRepository datamatrixCodeRepository;
 
     @Transactional
     @CacheEvict(value = "folderTrees", key = "#companyOwnerId")
@@ -68,6 +73,7 @@ public class FolderServiceIml implements FolderService {
                 .icon(dto.getIcon())
                 .position(0)
                 .sourceType(dto.getSourceType() != null ? dto.getSourceType() : SourceType.MANUAL)
+                .isTemplate(dto.getIsTemplate() != null ? dto.getIsTemplate() : false)
                 .build();
 
         folder = folderRepository.save(folder);
@@ -93,6 +99,7 @@ public class FolderServiceIml implements FolderService {
         if (dto.getColor() != null) folder.setColor(dto.getColor());
         if (dto.getIcon() != null) folder.setIcon(dto.getIcon());
         if (dto.getPosition() != null) folder.setPosition(dto.getPosition());
+        if (dto.getIsTemplate() != null) folder.setIsTemplate(dto.getIsTemplate());
 
         folder = folderRepository.save(folder);
         log.info("Updated folder {} for user {}", folderId, userEmail);
@@ -302,6 +309,7 @@ public class FolderServiceIml implements FolderService {
                 .color(folder.getColor())
                 .icon(folder.getIcon())
                 .position(folder.getPosition())
+                .isTemplate(folder.getIsTemplate())
                 .productsCount(productsCount.intValue())
                 .subfoldersCount(subfoldersCount.intValue())
                 .createdAt(folder.getCreatedAt())
@@ -563,5 +571,238 @@ public class FolderServiceIml implements FolderService {
                     "Неподдерживаемый тип папки: " + folder.getSourceType()
                 );
         }
+    }
+
+    @Override
+    @Transactional
+    public FolderResponseDto toggleTemplate(String userEmail, Long companyOwnerId, Long folderId, Boolean isTemplate) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        ProductFolder folder = getFolderWithAccessCheck(folderId, companyOwnerId);
+        folder.setIsTemplate(isTemplate);
+        folder = folderRepository.save(folder);
+
+        log.info("Папка {} установлена как шаблонная: {} пользователем {}", folderId, isTemplate, userEmail);
+        return mapToDto(folder);
+    }
+
+    @Override
+    public FolderDataMatrixStats getFolderDataMatrixStats(String userEmail, Long companyOwnerId, Long folderId) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        ProductFolder folder = getFolderWithAccessCheck(folderId, companyOwnerId);
+
+        // Получаем все продукты в папке
+        List<OzonProduct> products = productRepository.findByUserIdAndFolderId(companyOwnerId, folderId);
+        List<Long> productIds = products.stream()
+                .map(OzonProduct::getProductId)
+                .toList();
+
+        if (productIds.isEmpty()) {
+            return FolderDataMatrixStats.builder()
+                    .totalCodes(0L)
+                    .remainingCodes(0L)
+                    .productsWithCodes(0)
+                    .productsWithoutCodes(0)
+                    .build();
+        }
+
+        // Получаем статистику по DataMatrix кодам
+        List<Object[]> stats = datamatrixCodeRepository.getStatsByProductIds(companyOwnerId, productIds);
+
+        long totalCodes = 0;
+        long remainingCodes = 0;
+        Set<Long> productsWithCodesSet = stats.stream()
+                .map(row -> (Long) row[0])
+                .collect(Collectors.toSet());
+
+        for (Object[] row : stats) {
+            totalCodes += (Long) row[1];
+            remainingCodes += (Long) row[2];
+        }
+
+        int productsWithCodes = productsWithCodesSet.size();
+        int productsWithoutCodes = productIds.size() - productsWithCodes;
+
+        return FolderDataMatrixStats.builder()
+                .totalCodes(totalCodes)
+                .remainingCodes(remainingCodes)
+                .productsWithCodes(productsWithCodes)
+                .productsWithoutCodes(productsWithoutCodes)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public OrderUploadResult uploadPrintOrder(String userEmail, Long companyOwnerId, MultipartFile file) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        List<String> notFoundBarcodes = new ArrayList<>();
+        List<AmbiguousBarcodeDto> ambiguous = new ArrayList<>();
+        List<OzonProduct> productsToUpdate = new ArrayList<>();
+        int matchedCount = 0;
+
+        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+            Sheet sheet = workbook.getSheetAt(0);
+
+            // Находим индексы колонок по заголовкам
+            Row headerRow = sheet.getRow(0);
+            if (headerRow == null) {
+                throw new ValidationException("Excel файл не содержит заголовков");
+            }
+
+            int barcodeColIdx = -1;
+            int quantityColIdx = -1;
+
+            for (Cell cell : headerRow) {
+                String cellValue = getCellValueAsString(cell).trim();
+                if ("Штрихкод".equalsIgnoreCase(cellValue) || "Barcode".equalsIgnoreCase(cellValue)) {
+                    barcodeColIdx = cell.getColumnIndex();
+                } else if ("Количество".equalsIgnoreCase(cellValue) || "Quantity".equalsIgnoreCase(cellValue)
+                        || "Кол-во".equalsIgnoreCase(cellValue)) {
+                    quantityColIdx = cell.getColumnIndex();
+                }
+            }
+
+            if (barcodeColIdx == -1 || quantityColIdx == -1) {
+                throw new ValidationException("Excel файл должен содержать колонки 'Штрихкод' и 'Количество'");
+            }
+
+            // Обрабатываем строки данных
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                String barcode = getCellValueAsString(row.getCell(barcodeColIdx)).trim();
+                if (barcode.isEmpty()) continue;
+
+                String quantityStr = getCellValueAsString(row.getCell(quantityColIdx)).trim();
+                int quantity;
+                try {
+                    quantity = Integer.parseInt(quantityStr);
+                } catch (NumberFormatException e) {
+                    log.warn("Некорректное количество для штрихкода {}: {}", barcode, quantityStr);
+                    continue;
+                }
+
+                // Ищем товары по штрихкоду
+                List<OzonProduct> products = productRepository.findByUserIdAndBarcode(companyOwnerId, barcode);
+
+                if (products.isEmpty()) {
+                    notFoundBarcodes.add(barcode);
+                } else if (products.size() == 1) {
+                    products.get(0).setPrintQuantity(quantity);
+                    productsToUpdate.add(products.get(0));
+                    matchedCount++;
+                } else {
+                    // Несколько товаров с одинаковым штрихкодом в разных папках
+                    List<FolderInfoDto> folders = products.stream()
+                            .map(p -> FolderInfoDto.builder()
+                                    .folderId(p.getFolderId())
+                                    .folderName(getFolderName(p.getFolderId()))
+                                    .build())
+                            .distinct()
+                            .toList();
+
+                    ambiguous.add(AmbiguousBarcodeDto.builder()
+                            .barcode(barcode)
+                            .quantity(quantity)
+                            .folders(folders)
+                            .build());
+                }
+            }
+
+            // Batch-сохранение обновлённых товаров
+            if (!productsToUpdate.isEmpty()) {
+                productRepository.saveAll(productsToUpdate);
+                log.info("Обновлено {} товаров для печати пользователем {}", productsToUpdate.size(), userEmail);
+            }
+
+        } catch (Exception e) {
+            log.error("Ошибка при загрузке Excel файла: {}", e.getMessage(), e);
+            throw new ValidationException("Ошибка при чтении Excel файла: " + e.getMessage());
+        }
+
+        return OrderUploadResult.builder()
+                .matchedCount(matchedCount)
+                .notFoundCount(notFoundBarcodes.size())
+                .notFoundBarcodes(notFoundBarcodes)
+                .ambiguous(ambiguous)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void resolvePrintOrder(String userEmail, Long companyOwnerId, ResolveOrderRequest request) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        List<OzonProduct> productsToUpdate = new ArrayList<>();
+
+        for (ResolveOrderRequest.BarcodeResolution resolution : request.getResolutions()) {
+            // Находим товар в указанной папке по штрихкоду
+            List<OzonProduct> products = productRepository.findByUserIdAndFolderId(companyOwnerId, resolution.getFolderId())
+                    .stream()
+                    .filter(p -> p.getBarcodes() != null && p.getBarcodes().contains(resolution.getBarcode()))
+                    .toList();
+
+            if (!products.isEmpty()) {
+                products.get(0).setPrintQuantity(resolution.getQuantity());
+                productsToUpdate.add(products.get(0));
+            }
+        }
+
+        if (!productsToUpdate.isEmpty()) {
+            productRepository.saveAll(productsToUpdate);
+            log.info("Разрешено {} неоднозначностей штрихкодов пользователем {}", productsToUpdate.size(), userEmail);
+        }
+    }
+
+    @Override
+    public List<FolderResponseDto> getFoldersBySourceType(String userEmail, Long companyOwnerId, String sourceTypeStr) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        SourceType sourceType;
+        try {
+            sourceType = SourceType.valueOf(sourceTypeStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException("Некорректный тип источника: " + sourceTypeStr);
+        }
+
+        List<ProductFolder> folders = folderRepository.findByUserIdAndSourceType(companyOwnerId, sourceType);
+        return folders.stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+    }
+
+    // Вспомогательные методы
+
+    private String getCellValueAsString(Cell cell) {
+        if (cell == null) return "";
+
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue();
+            case NUMERIC -> {
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    yield cell.getDateCellValue().toString();
+                } else {
+                    double numericValue = cell.getNumericCellValue();
+                    if (numericValue == (long) numericValue) {
+                        yield String.valueOf((long) numericValue);
+                    } else {
+                        yield String.valueOf(numericValue);
+                    }
+                }
+            }
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            case FORMULA -> cell.getCellFormula();
+            default -> "";
+        };
+    }
+
+    private String getFolderName(Long folderId) {
+        if (folderId == null) return "Без папки";
+        return folderRepository.findById(folderId)
+                .map(ProductFolder::getName)
+                .orElse("Неизвестно");
     }
 }

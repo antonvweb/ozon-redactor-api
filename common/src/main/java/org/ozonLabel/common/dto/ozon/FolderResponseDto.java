@@ -19,6 +19,7 @@ public class FolderResponseDto {
     private String color;
     private String icon;
     private Integer position;
+    private Boolean isTemplate;
     private Integer productsCount;
     private Integer subfoldersCount;
     private LocalDateTime createdAt;

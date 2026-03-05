@@ -4,10 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.ozonLabel.common.dto.datamatrix.DataMatrixStatsDto;
 import org.ozonLabel.common.dto.ozon.*;
 import org.ozonLabel.common.dto.user.UserResponseDto;
 import org.ozonLabel.common.service.ozon.OzonService;
 import org.ozonLabel.common.service.user.UserService;
+import org.ozonLabel.ozonApi.repository.DataMatrixCodeRepository;
+import org.ozonLabel.ozonApi.repository.LabelRepository;
 import org.ozonLabel.ozonApi.repository.ProductFolderRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.ozonLabel.common.exception.ozon.OzonApiCredentialsMissingException;
@@ -29,6 +32,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +48,8 @@ public class OzonServiceIml implements OzonService {
     private final ProductFolderRepository folderRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final LabelRepository labelRepository;
+    private final DataMatrixCodeRepository dataMatrixCodeRepository;
 
     /**
      * Синхронизация товаров с указанием папки
@@ -518,6 +524,9 @@ public class OzonServiceIml implements OzonService {
                 .stock(stock)
                 .color(color)
                 .tags(tags)
+                .printQuantity(1)  // По умолчанию 1, будет заполнено при загрузке из БД
+                .hasLabel(false)   // TODO: заполнять через labelRepository при загрузке списка
+                .dataMatrixStats(null) // TODO: заполнять через dataMatrixCodeRepository при загрузке
                 .build();
     }
 
@@ -869,5 +878,40 @@ public class OzonServiceIml implements OzonService {
             log.error("Ошибка при парсинге даты: {}", dateTime, e);
             return null;
         }
+    }
+
+    @Override
+    @Transactional
+    public ProductInfo updatePrintQuantity(Long userId, Long productId, Integer quantity) {
+        log.info("Обновление количества для печати товара productId={} для пользователя {}: quantity={}",
+                productId, userId, quantity);
+        
+        OzonProduct product = ozonProductRepository.findByUserIdAndProductId(userId, productId)
+                .orElseThrow(() -> new IllegalArgumentException("Товар не найден"));
+        
+        product.setPrintQuantity(quantity);
+        OzonProduct saved = ozonProductRepository.save(product);
+        
+        return mapToProductInfo(saved);
+    }
+
+    @Override
+    @Transactional
+    public int bulkUpdateQuantity(List<Long> productIds, Long userId, Integer quantity) {
+        log.info("Массовое обновление количества для печати: {} товаров для пользователя {}, quantity={}",
+                productIds.size(), userId, quantity);
+        
+        int updatedCount = 0;
+        for (Long productId : productIds) {
+            Optional<OzonProduct> productOpt = ozonProductRepository.findByUserIdAndProductId(userId, productId);
+            if (productOpt.isPresent()) {
+                OzonProduct product = productOpt.get();
+                product.setPrintQuantity(quantity);
+                ozonProductRepository.save(product);
+                updatedCount++;
+            }
+        }
+        
+        return updatedCount;
     }
 }

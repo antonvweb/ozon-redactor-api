@@ -2,14 +2,22 @@ package org.ozonLabel.ozonApi.controller;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ozon.*;
 import org.ozonLabel.common.service.ozon.OzonService;
 import org.ozonLabel.common.service.ozon.ProductCreationService;
 import org.ozonLabel.common.service.user.CompanyService;
+import org.ozonLabel.common.service.user.UserService;
+import org.ozonLabel.common.dto.user.UserResponseDto;
+import org.ozonLabel.common.dto.datamatrix.DataMatrixStatsDto;
 import org.ozonLabel.ozonApi.entity.OzonProduct;
+import org.ozonLabel.ozonApi.entity.TableColumnSettings;
 import org.ozonLabel.ozonApi.repository.OzonProductRepository;
+import org.ozonLabel.ozonApi.repository.TableColumnSettingsRepository;
+import org.ozonLabel.ozonApi.repository.LabelRepository;
+import org.ozonLabel.ozonApi.repository.DataMatrixCodeRepository;
 import org.ozonLabel.ozonApi.service.OzonServiceIml;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -18,11 +26,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,6 +46,10 @@ public class OzonController {
     private final ProductCreationService productCreationService;
     private final OzonProductRepository productRepository;
     private final CompanyService companyService;
+    private final UserService userService;
+    private final TableColumnSettingsRepository columnSettingsRepository;
+    private final LabelRepository labelRepository;
+    private final DataMatrixCodeRepository dataMatrixCodeRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -118,8 +132,10 @@ public class OzonController {
     }
 
     /**
-     * Создать товар из Excel файла
+     * Создать товар из Excel файла (импорт товаров)
+     * @deprecated Используйте /products/import-excel
      */
+    @Deprecated
     @PostMapping("/products/upload-excel")
     public ResponseEntity<Map<String, Object>> uploadExcel(
             @RequestParam("file") MultipartFile file,
@@ -127,20 +143,83 @@ public class OzonController {
             Authentication auth) {
 
         String userEmail = auth.getName();
-        log.info("Загрузка Excel файла '{}' для пользователя {} в папку {}",
-                file.getOriginalFilename(), userEmail, folderId);
+        log.info("Загрузка Excel файла '{}' для пользователя {} (deprecated endpoint)",
+                file.getOriginalFilename(), userEmail);
 
-        ProductInfo product = productCreationService.createProductFromExcel(userEmail, file, folderId);
-        ProductFrontendResponse frontend = ozonService.toFrontendResponse(product);
+        // Для обратной совместимости вызываем importFromExcel и возвращаем первый товар
+        Long companyOwnerId = getUserCompanyId(userEmail);
+        ExcelImportResult result = productCreationService.importFromExcel(userEmail, companyOwnerId, file, folderId);
+
+        if (result.getProductIds() == null || result.getProductIds().isEmpty()) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Файл не содержит данных");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        Long firstProductId = result.getProductIds().get(0);
+        OzonProduct product = productRepository.findByUserIdAndProductId(companyOwnerId, firstProductId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Товар не найден"));
+
+        ProductInfo productInfo = mapToProductInfo(product);
+        ProductFrontendResponse frontend = ozonService.toFrontendResponse(productInfo);
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("message", "Файл успешно загружен");
-        response.put("productId", product.getId());
+        response.put("productId", firstProductId);
         response.put("filename", file.getOriginalFilename());
-        response.put("product", frontend); // добавляем готовый объект для фронта
+        response.put("product", frontend);
+        response.put("importResult", result); // Добавляем полный результат импорта
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Импортировать товары из Excel файла
+     */
+    @PostMapping("/products/import-excel")
+    public ResponseEntity<ExcelImportResult> importFromExcel(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam Long companyOwnerId,
+            @RequestParam(required = false) Long folderId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        log.info("Импорт товаров из Excel файла '{}' для пользователя {} в папку {}",
+                file.getOriginalFilename(), userEmail, folderId);
+
+        ExcelImportResult result = productCreationService.importFromExcel(userEmail, companyOwnerId, file, folderId);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Обновить данные папки из Excel файла (обновление файла)
+     */
+    @PostMapping("/products/update-excel/{folderId}")
+    public ResponseEntity<ExcelImportResult> updateExcelFile(
+            @PathVariable Long folderId,
+            @RequestParam Long companyOwnerId,
+            @RequestParam("file") MultipartFile file,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        log.info("Обновление папки {} из Excel файла '{}' для пользователя {}",
+                folderId, file.getOriginalFilename(), userEmail);
+
+        ExcelImportResult result = productCreationService.updateExcelFile(userEmail, companyOwnerId, folderId, file);
+        return ResponseEntity.ok(result);
+    }
+
+    private Long getUserCompanyId(String userEmail) {
+        // Получаем ID компании пользователя (в данном случае это userId)
+        return userService.findByEmail(userEmail)
+                .map(UserResponseDto::getId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
     }
 
     /**
@@ -183,8 +262,7 @@ public class OzonController {
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (Exception e) {
-            log.error("Ошибка сериализации в JSON", e);
-            return null;
+            throw new RuntimeException("Ошибка сериализации в JSON", e);
         }
     }
 
@@ -417,8 +495,37 @@ public class OzonController {
 
         productsPage = new PageImpl<>(content, pageable, totalElements);
 
+        // Получаем productId для загрузки hasLabel и dataMatrixStats
+        List<Long> productIds = content.stream().map(OzonProduct::getProductId).toList();
+        
+        // Загружаем hasLabel одним запросом
+        Set<Long> productIdsWithLabels = new HashSet<>(
+            labelRepository.findProductIdsWithLabels(companyOwnerId, productIds)
+        );
+        
+        // Загружаем dataMatrixStats одним запросом
+        List<Object[]> dmStats = dataMatrixCodeRepository.getStatsByProductIds(companyOwnerId, productIds);
+        Map<Long, DataMatrixStatsDto> statsMap = new HashMap<>();
+        for (Object[] stat : dmStats) {
+            Long pid = (Long) stat[0];
+            Long total = ((Number) stat[1]).longValue();
+            Long remaining = ((Number) stat[2]).longValue();
+            Long used = total - remaining;
+            statsMap.put(pid, DataMatrixStatsDto.builder()
+                    .total(total)
+                    .remaining(remaining)
+                    .used(used)
+                    .build());
+        }
+
         List<ProductFrontendResponse> responses = content.stream()
-                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
+                .map(product -> {
+                    ProductFrontendResponse resp = ozonService.toFrontendResponse(mapToProductInfo(product));
+                    resp.setPrintQuantity(product.getPrintQuantity() != null ? product.getPrintQuantity() : 1);
+                    resp.setHasLabel(productIdsWithLabels.contains(product.getProductId()));
+                    resp.setDataMatrixStats(statsMap.get(product.getProductId()));
+                    return resp;
+                })
                 .collect(Collectors.toList());
 
         Map<String, Object> response = new HashMap<>();
@@ -479,8 +586,37 @@ public class OzonController {
 
         productsPage = new PageImpl<>(content, pageable, totalElements);
 
+        // Получаем productId для загрузки hasLabel и dataMatrixStats
+        List<Long> productIds = content.stream().map(OzonProduct::getProductId).toList();
+        
+        // Загружаем hasLabel одним запросом
+        Set<Long> productIdsWithLabels = new HashSet<>(
+            labelRepository.findProductIdsWithLabels(companyOwnerId, productIds)
+        );
+        
+        // Загружаем dataMatrixStats одним запросом
+        List<Object[]> dmStats = dataMatrixCodeRepository.getStatsByProductIds(companyOwnerId, productIds);
+        Map<Long, DataMatrixStatsDto> statsMap = new HashMap<>();
+        for (Object[] stat : dmStats) {
+            Long pid = (Long) stat[0];
+            Long total = ((Number) stat[1]).longValue();
+            Long remaining = ((Number) stat[2]).longValue();
+            Long used = total - remaining;
+            statsMap.put(pid, DataMatrixStatsDto.builder()
+                    .total(total)
+                    .remaining(remaining)
+                    .used(used)
+                    .build());
+        }
+
         List<ProductFrontendResponse> responses = content.stream()
-                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
+                .map(product -> {
+                    ProductFrontendResponse resp = ozonService.toFrontendResponse(mapToProductInfo(product));
+                    resp.setPrintQuantity(product.getPrintQuantity() != null ? product.getPrintQuantity() : 1);
+                    resp.setHasLabel(productIdsWithLabels.contains(product.getProductId()));
+                    resp.setDataMatrixStats(statsMap.get(product.getProductId()));
+                    return resp;
+                })
                 .collect(Collectors.toList());
 
         Map<String, Object> response = new HashMap<>();
@@ -539,8 +675,37 @@ public class OzonController {
 
         productsPage = new PageImpl<>(content, pageable, totalElements);
 
+        // Получаем productId для загрузки hasLabel и dataMatrixStats
+        List<Long> productIds = content.stream().map(OzonProduct::getProductId).toList();
+        
+        // Загружаем hasLabel одним запросом
+        Set<Long> productIdsWithLabels = new HashSet<>(
+            labelRepository.findProductIdsWithLabels(companyOwnerId, productIds)
+        );
+        
+        // Загружаем dataMatrixStats одним запросом
+        List<Object[]> dmStats = dataMatrixCodeRepository.getStatsByProductIds(companyOwnerId, productIds);
+        Map<Long, DataMatrixStatsDto> statsMap = new HashMap<>();
+        for (Object[] stat : dmStats) {
+            Long pid = (Long) stat[0];
+            Long total = ((Number) stat[1]).longValue();
+            Long remaining = ((Number) stat[2]).longValue();
+            Long used = total - remaining;
+            statsMap.put(pid, DataMatrixStatsDto.builder()
+                    .total(total)
+                    .remaining(remaining)
+                    .used(used)
+                    .build());
+        }
+
         List<ProductFrontendResponse> responses = content.stream()
-                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
+                .map(product -> {
+                    ProductFrontendResponse resp = ozonService.toFrontendResponse(mapToProductInfo(product));
+                    resp.setPrintQuantity(product.getPrintQuantity() != null ? product.getPrintQuantity() : 1);
+                    resp.setHasLabel(productIdsWithLabels.contains(product.getProductId()));
+                    resp.setDataMatrixStats(statsMap.get(product.getProductId()));
+                    return resp;
+                })
                 .collect(Collectors.toList());
 
         Map<String, Object> response = new HashMap<>();
@@ -578,8 +743,37 @@ public class OzonController {
 
         productsPage = new PageImpl<>(content, pageable, productsPage.getTotalElements());
 
+        // Получаем productId для загрузки hasLabel и dataMatrixStats
+        List<Long> productIds = content.stream().map(OzonProduct::getProductId).toList();
+        
+        // Загружаем hasLabel одним запросом
+        Set<Long> productIdsWithLabels = new HashSet<>(
+            labelRepository.findProductIdsWithLabels(companyOwnerId, productIds)
+        );
+        
+        // Загружаем dataMatrixStats одним запросом
+        List<Object[]> dmStats = dataMatrixCodeRepository.getStatsByProductIds(companyOwnerId, productIds);
+        Map<Long, DataMatrixStatsDto> statsMap = new HashMap<>();
+        for (Object[] stat : dmStats) {
+            Long pid = (Long) stat[0];
+            Long total = ((Number) stat[1]).longValue();
+            Long remaining = ((Number) stat[2]).longValue();
+            Long used = total - remaining;
+            statsMap.put(pid, DataMatrixStatsDto.builder()
+                    .total(total)
+                    .remaining(remaining)
+                    .used(used)
+                    .build());
+        }
+
         List<ProductFrontendResponse> responses = content.stream()
-                .map(product -> ozonService.toFrontendResponse(mapToProductInfo(product)))
+                .map(product -> {
+                    ProductFrontendResponse resp = ozonService.toFrontendResponse(mapToProductInfo(product));
+                    resp.setPrintQuantity(product.getPrintQuantity() != null ? product.getPrintQuantity() : 1);
+                    resp.setHasLabel(productIdsWithLabels.contains(product.getProductId()));
+                    resp.setDataMatrixStats(statsMap.get(product.getProductId()));
+                    return resp;
+                })
                 .collect(Collectors.toList());
 
         Map<String, Object> response = new HashMap<>();
@@ -651,5 +845,144 @@ public class OzonController {
             comparator = comparator.reversed();
         }
         products.sort(comparator);
+    }
+
+    /**
+     * Обновить количество копий для печати для одного товара
+     */
+    @PutMapping("/products/{productId}/quantity")
+    public ResponseEntity<ProductFrontendResponse> updatePrintQuantity(
+            @PathVariable Long productId,
+            @RequestParam Long companyOwnerId,
+            @RequestBody @Valid UpdateQuantityRequest request,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        log.info("Обновление количества для печати товара {} для пользователя {}: quantity={}",
+                productId, companyOwnerId, request.getQuantity());
+
+        ProductInfo updated = ozonService.updatePrintQuantity(companyOwnerId, productId, request.getQuantity());
+        return ResponseEntity.ok(ozonService.toFrontendResponse(updated));
+    }
+
+    /**
+     * Массово обновить количество копий для печати
+     */
+    @PostMapping("/products/bulk/quantity")
+    public ResponseEntity<Map<String, Object>> bulkUpdateQuantity(
+            @RequestParam Long companyOwnerId,
+            @RequestBody @Valid BulkUpdateQuantityRequest request,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        if (request.getProductIds() == null || request.getProductIds().isEmpty()) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Список товаров не может быть пустым");
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        log.info("Массовое обновление количества для печати: {} товаров для пользователя {}",
+                request.getProductIds().size(), companyOwnerId);
+
+        int updatedCount = ozonService.bulkUpdateQuantity(request.getProductIds(), companyOwnerId, request.getQuantity());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", String.format("Количество обновлено для %d товаров", updatedCount));
+        response.put("updatedCount", updatedCount);
+        response.put("totalRequested", request.getProductIds().size());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Получить настройки видимости колонок таблицы
+     */
+    @GetMapping("/settings/columns")
+    public ResponseEntity<Map<String, Boolean>> getColumnSettings(
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        log.info("Получение настроек видимости колонок для компании {}", companyOwnerId);
+
+        Optional<TableColumnSettings> settingsOpt = columnSettingsRepository.findByCompanyId(companyOwnerId);
+        
+        Map<String, Boolean> defaultSettings = new HashMap<>();
+        defaultSettings.put("photo", true);
+        defaultSettings.put("barcode", true);
+        defaultSettings.put("offerId", true);
+        defaultSettings.put("name", true);
+        defaultSettings.put("tags", true);      // всегда true
+        defaultSettings.put("quantity", true);  // всегда true
+        defaultSettings.put("price", true);
+        defaultSettings.put("stock", true);
+        defaultSettings.put("sku", true);
+
+        if (settingsOpt.isEmpty()) {
+            return ResponseEntity.ok(defaultSettings);
+        }
+
+        TableColumnSettings settings = settingsOpt.get();
+        Map<String, Boolean> columns = parseJson(settings.getColumns(), new TypeReference<Map<String, Boolean>>() {});
+        
+        if (columns == null) {
+            columns = new HashMap<>();
+        }
+
+        // Гарантируем что quantity и tags всегда true
+        columns.put("quantity", true);
+        columns.put("tags", true);
+
+        return ResponseEntity.ok(columns);
+    }
+
+    /**
+     * Обновить настройки видимости колонок таблицы
+     */
+    @PutMapping("/settings/columns")
+    public ResponseEntity<Map<String, Boolean>> updateColumnSettings(
+            @RequestParam Long companyOwnerId,
+            @RequestBody Map<String, Boolean> columns,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        log.info("Обновление настроек видимости колонок для компании {}", companyOwnerId);
+
+        // quantity и tags всегда true, игнорируем попытки установить false
+        if (columns == null) {
+            columns = new HashMap<>();
+        }
+        columns.put("quantity", true);
+        columns.put("tags", true);
+
+        String columnsJson = serializeToJson(columns);
+        
+        Optional<TableColumnSettings> existingOpt = columnSettingsRepository.findByCompanyId(companyOwnerId);
+        
+        if (existingOpt.isPresent()) {
+            TableColumnSettings existing = existingOpt.get();
+            existing.setColumns(columnsJson);
+            existing.setUpdatedAt(LocalDateTime.now());
+            columnSettingsRepository.save(existing);
+        } else {
+            TableColumnSettings newSettings = TableColumnSettings.builder()
+                    .companyId(companyOwnerId)
+                    .columns(columnsJson)
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+            columnSettingsRepository.save(newSettings);
+        }
+
+        return ResponseEntity.ok(columns);
     }
 }

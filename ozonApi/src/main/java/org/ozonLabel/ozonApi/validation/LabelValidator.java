@@ -19,7 +19,7 @@ public class LabelValidator {
     );
 
     private static final Set<String> VALID_BARCODE_TYPES = Set.of(
-            "Code 128", "Code 39", "EAN-13", "EAN-8", "UPC-A"
+            "Code 128", "Code 39", "EAN-13", "EAN-8", "UPC-A", "QR"
     );
 
     private static final Set<String> VALID_DATE_TYPES = Set.of(
@@ -28,6 +28,9 @@ public class LabelValidator {
 
     private static final BigDecimal MIN_SIZE = new BigDecimal("10");
     private static final BigDecimal MAX_SIZE = new BigDecimal("300");
+
+    private static final BigDecimal MIN_LINEAR_BARCODE_WIDTH = new BigDecimal("30");
+    private static final BigDecimal MIN_SQUARE_BARCODE_SIZE = new BigDecimal("12");
 
     public void validate(LabelConfigDto config) {
         validateSize(config);
@@ -83,6 +86,39 @@ public class LabelValidator {
             case "barcode" -> {
                 if (element.getBarcodeType() != null && !VALID_BARCODE_TYPES.contains(element.getBarcodeType())) {
                     throw new ValidationException("Недопустимый тип штрихкода: " + element.getBarcodeType());
+                }
+
+                boolean isQR = "QR".equals(element.getBarcodeType());
+
+                if (isQR) {
+                    if (element.getWidth() != null
+                            && element.getWidth().compareTo(MIN_SQUARE_BARCODE_SIZE) < 0) {
+                        throw new ValidationException(
+                                "Минимальная ширина QR-кода: " + MIN_SQUARE_BARCODE_SIZE + " мм");
+                    }
+                    if (element.getHeight() != null
+                            && element.getHeight().compareTo(MIN_SQUARE_BARCODE_SIZE) < 0) {
+                        throw new ValidationException(
+                                "Минимальная высота QR-кода: " + MIN_SQUARE_BARCODE_SIZE + " мм");
+                    }
+                } else {
+                    if (element.getWidth() != null
+                            && element.getWidth().compareTo(MIN_LINEAR_BARCODE_WIDTH) < 0) {
+                        throw new ValidationException(
+                                "Минимальная ширина линейного штрихкода: " + MIN_LINEAR_BARCODE_WIDTH + " мм");
+                    }
+                }
+            }
+            case "datamatrix" -> {
+                if (element.getWidth() != null
+                        && element.getWidth().compareTo(MIN_SQUARE_BARCODE_SIZE) < 0) {
+                    throw new ValidationException(
+                            "Минимальная ширина DataMatrix: " + MIN_SQUARE_BARCODE_SIZE + " мм");
+                }
+                if (element.getHeight() != null
+                        && element.getHeight().compareTo(MIN_SQUARE_BARCODE_SIZE) < 0) {
+                    throw new ValidationException(
+                            "Минимальная высота DataMatrix: " + MIN_SQUARE_BARCODE_SIZE + " мм");
                 }
             }
             case "date" -> {

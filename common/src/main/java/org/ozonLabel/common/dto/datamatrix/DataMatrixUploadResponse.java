@@ -35,4 +35,14 @@ public class DataMatrixUploadResponse {
      * Список загруженных кодов
      */
     private List<String> codes;
+
+    /**
+     * Имена файлов, в которых найдены совпадения (только при checkDuplicates=true)
+     */
+    private java.util.List<String> duplicateSourceFiles;
+
+    /**
+     * ID созданного файла
+     */
+    private Long uploadedFileId;
 }

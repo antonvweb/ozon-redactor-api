@@ -13,4 +13,5 @@ public class UpdateFolderDto {
     private String color;
     private String icon;
     private Integer position;
+    private Boolean isTemplate;
 }

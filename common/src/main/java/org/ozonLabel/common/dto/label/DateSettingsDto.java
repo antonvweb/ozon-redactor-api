@@ -15,6 +15,24 @@ public class DateSettingsDto {
     private String format;
     private String customDateText;
 
+    // Умная дата
+    private Boolean smartDate;
+
+    // Срок годности
+    private Integer shelfLifeValue;
+    private String shelfLifeUnit; // "day" | "month" | "year"
+
+    // Что показывать
+    private Boolean showManufactureDate;
+    private Boolean showBestBefore;
+    private Boolean showShelfLife;
+
+    // Пользовательская дата (если не умная дата)
+    private String customDate;
+
+    // Отображение
+    private Boolean abbreviateText;
+
     @Data
     @Builder
     @NoArgsConstructor

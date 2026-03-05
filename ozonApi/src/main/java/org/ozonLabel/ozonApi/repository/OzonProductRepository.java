@@ -76,53 +76,68 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
 
     Long countByUserIdAndFolderIdIsNull(Long userId);
 
+    // Поиск товара по штрихкоду (JSONB поиск в barcodes)
+    @Query(value = """
+        SELECT * FROM ozon_products p
+        WHERE p.user_id = :userId
+        AND CAST(p.barcodes AS TEXT) LIKE CONCAT('%', :barcode, '%')
+        """, nativeQuery = true)
+    List<OzonProduct> findByUserIdAndBarcode(@Param("userId") Long userId,
+                                              @Param("barcode") String barcode);
+
     // Size-related methods
     List<OzonProduct> findByUserIdAndSize(Long userId, String size);
 
-    // Поиск по названию, тегу, артикулам с пагинацией
+    // Поиск по названию, тегу, артикулам с пагинацией (включая barcodes)
     @Query(value = "SELECT * FROM ozon_products p WHERE p.user_id = :userId AND " +
             "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-            "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')))",
+            "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+            "CAST(p.barcodes AS TEXT) LIKE CONCAT('%', :searchTerm, '%'))",
             countQuery = "SELECT COUNT(*) FROM ozon_products p WHERE p.user_id = :userId AND " +
                     "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
                     "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
                     "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-                    "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')))",
+                    "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+                    "CAST(p.barcodes AS TEXT) LIKE CONCAT('%', :searchTerm, '%'))",
             nativeQuery = true)
     Page<OzonProduct> searchProducts(@Param("userId") Long userId,
                                      @Param("searchTerm") String searchTerm,
                                      Pageable pageable);
 
-    // Поиск в конкретной папке
+    // Поиск в конкретной папке (включая barcodes)
     @Query(value = "SELECT * FROM ozon_products p WHERE p.user_id = :userId AND p.folder_id = :folderId AND " +
             "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-            "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')))",
+            "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+            "CAST(p.barcodes AS TEXT) LIKE CONCAT('%', :searchTerm, '%'))",
             countQuery = "SELECT COUNT(*) FROM ozon_products p WHERE p.user_id = :userId AND p.folder_id = :folderId AND " +
                     "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
                     "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
                     "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-                    "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')))",
+                    "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+                    "CAST(p.barcodes AS TEXT) LIKE CONCAT('%', :searchTerm, '%'))",
             nativeQuery = true)
     Page<OzonProduct> searchProductsInFolder(@Param("userId") Long userId,
                                              @Param("folderId") Long folderId,
                                              @Param("searchTerm") String searchTerm,
                                              Pageable pageable);
 
-    // Поиск товаров без папки
+    // Поиск товаров без папки (включая barcodes)
     @Query(value = "SELECT * FROM ozon_products p WHERE p.user_id = :userId AND p.folder_id IS NULL AND " +
             "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-            "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')))",
+            "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+            "CAST(p.barcodes AS TEXT) LIKE CONCAT('%', :searchTerm, '%'))",
             countQuery = "SELECT COUNT(*) FROM ozon_products p WHERE p.user_id = :userId AND p.folder_id IS NULL AND " +
                     "(LOWER(p.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
                     "LOWER(p.offer_id) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
                     "CAST(p.sku AS TEXT) LIKE CONCAT('%', :searchTerm, '%') OR " +
-                    "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')))",
+                    "LOWER(CAST(p.tags AS TEXT)) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+                    "CAST(p.barcodes AS TEXT) LIKE CONCAT('%', :searchTerm, '%'))",
             nativeQuery = true)
     Page<OzonProduct> searchProductsWithoutFolder(@Param("userId") Long userId,
                                                   @Param("searchTerm") String searchTerm,

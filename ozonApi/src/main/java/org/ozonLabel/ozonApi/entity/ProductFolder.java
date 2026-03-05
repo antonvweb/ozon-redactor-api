@@ -47,6 +47,13 @@ public class ProductFolder {
     @Builder.Default
     private SourceType sourceType = SourceType.MANUAL;
 
+    @Column(name = "source_file_name")
+    private String sourceFileName;
+
+    @Column(name = "is_template")
+    @Builder.Default
+    private Boolean isTemplate = false;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 

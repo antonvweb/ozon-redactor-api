@@ -1,5 +1,6 @@
 package org.ozonLabel.ozonApi.repository;
 
+import org.ozonLabel.common.model.SourceType;
 import org.ozonLabel.ozonApi.entity.ProductFolder;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -20,6 +21,9 @@ public interface ProductFolderRepository extends JpaRepository<ProductFolder, Lo
 
     // Получить все папки пользователя
     List<ProductFolder> findByUserIdOrderByPositionAsc(Long userId);
+
+    // Получить папки по типу источника
+    List<ProductFolder> findByUserIdAndSourceType(Long userId, SourceType sourceType);
 
     // Найти папку по имени и родителю
     Optional<ProductFolder> findByUserIdAndNameAndParentFolderId(Long userId, String name, Long parentFolderId);

@@ -1,8 +1,10 @@
 package org.ozonLabel.common.service.datamatrix;
 
 import org.ozonLabel.common.dto.datamatrix.DataMatrixCodeDto;
+import org.ozonLabel.common.dto.datamatrix.DataMatrixFileDto;
 import org.ozonLabel.common.dto.datamatrix.DataMatrixStatsDto;
 import org.ozonLabel.common.dto.datamatrix.DataMatrixUploadResponse;
+import org.ozonLabel.common.dto.datamatrix.DeleteFileResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
@@ -71,7 +73,59 @@ public interface DataMatrixService {
      * @return распарсенные данные {gtin, serial, verificationKey}
      */
     GS1DataMatrixResult parseGS1Code(String rawCode);
-    
+
+    /**
+     * Получить историю файлов для продукта
+     * @param userEmail email пользователя
+     * @param companyOwnerId ID компании
+     * @param productId ID продукта
+     * @return список файлов с кодами
+     */
+    java.util.List<DataMatrixFileDto> getFileHistory(
+        String userEmail,
+        Long companyOwnerId,
+        Long productId
+    );
+
+    /**
+     * Скачать оригинальный CSV файл
+     * @param userEmail email пользователя
+     * @param companyOwnerId ID компании
+     * @param fileId ID файла
+     * @return содержимое файла как byte[]
+     */
+    byte[] downloadFileAsCSV(
+        String userEmail,
+        Long companyOwnerId,
+        Long fileId
+    );
+
+    /**
+     * Скачать список дубликатов как CSV
+     * @param userEmail email пользователя
+     * @param companyOwnerId ID компании
+     * @param fileId ID файла
+     * @return содержимое файла с дубликатами как byte[]
+     */
+    byte[] downloadDuplicatesAsCSV(
+        String userEmail,
+        Long companyOwnerId,
+        Long fileId
+    );
+
+    /**
+     * Удалить файл с кодами
+     * @param userEmail email пользователя
+     * @param companyOwnerId ID компании
+     * @param fileId ID файла
+     * @return результат удаления
+     */
+    DeleteFileResponse deleteFile(
+        String userEmail,
+        Long companyOwnerId,
+        Long fileId
+    );
+
     /**
      * Результат парсинга GS1 кода
      */
