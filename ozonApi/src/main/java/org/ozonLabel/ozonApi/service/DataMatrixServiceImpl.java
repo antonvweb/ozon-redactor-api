@@ -65,10 +65,10 @@ public class DataMatrixServiceImpl implements DataMatrixService {
         try {
             if (fileName.toLowerCase().endsWith(".pdf")) {
                 allCodes = parsePdf(file.getInputStream());
-            } else if (fileName.toLowerCase().endsWith(".csv")) {
+            } else if (fileName.toLowerCase().endsWith(".csv") || fileName.toLowerCase().endsWith(".txt")) {
                 allCodes = parseCsv(file.getInputStream());
             } else {
-                throw new ValidationException("Неподдерживаемый формат файла. Используйте PDF или CSV");
+                throw new ValidationException("Неподдерживаемый формат файла. Используйте PDF, CSV или TXT");
             }
         } catch (IOException e) {
             log.error("Ошибка при чтении файла: {}", e.getMessage());

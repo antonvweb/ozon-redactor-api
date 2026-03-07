@@ -12,7 +12,9 @@ import org.ozonLabel.common.service.label.ExportService;
 import org.ozonLabel.common.service.label.LabelService;
 import org.ozonLabel.common.service.label.PrintService;
 import org.ozonLabel.common.service.user.CompanyService;
+import org.ozonLabel.ozonApi.entity.Label;
 import org.ozonLabel.ozonApi.entity.OzonProduct;
+import org.ozonLabel.ozonApi.repository.LabelRepository;
 import org.ozonLabel.ozonApi.repository.OzonProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,28 +36,35 @@ public class ExportServiceImpl implements ExportService {
     private final ObjectMapper objectMapper;
     private final ExportFolderHelper exportFolderHelper;
     private final OzonProductRepository productRepository;
+    private final LabelRepository labelRepository;
 
     @Override
     @Transactional(readOnly = true)
     public byte[] exportLabels(String userEmail, Long companyOwnerId, ExportRequest request) {
         companyService.checkAccess(userEmail, companyOwnerId);
 
-        // Если folderIds указаны — собираем productIds из папок
-        if ((request.getProductIds() == null || request.getProductIds().isEmpty())
-                && request.getFolderIds() != null && !request.getFolderIds().isEmpty()) {
-            boolean withSubs = Boolean.TRUE.equals(request.getIncludeSubfolders());
-            List<Long> ids = exportFolderHelper.collectProductIds(companyOwnerId, request.getFolderIds(), withSubs);
-            request = request.toBuilder().productIds(ids).build();
+        // Проверка: если ничего не выбрано — возвращаем ошибку
+        boolean noProductIds = request.getProductIds() == null || request.getProductIds().isEmpty();
+        boolean noFolderIds = request.getFolderIds() == null || request.getFolderIds().isEmpty();
+
+        if (noProductIds && noFolderIds) {
+            throw new ValidationException("Требуется выбрать товары или папки для экспорта");
         }
 
-        // Если productIds всё ещё пустые — берём ВСЕ товары компании
-        if (request.getProductIds() == null || request.getProductIds().isEmpty()) {
-            List<Long> allIds = productRepository.findProductIdsByCompanyId(companyOwnerId);
-            if (allIds.isEmpty()) {
-                throw new ValidationException("У компании нет товаров для экспорта");
+        // Если folderIds указаны — собираем productIds из папок
+        if (noProductIds && !noFolderIds) {
+            boolean withSubs = Boolean.TRUE.equals(request.getIncludeSubfolders());
+            List<Long> ids = exportFolderHelper.collectProductIds(companyOwnerId, request.getFolderIds(), withSubs);
+            if (ids.isEmpty()) {
+                throw new ValidationException("В выбранных папках нет товаров для экспорта");
             }
-            request = request.toBuilder().productIds(allIds).build();
-            log.info("productIds не указаны, экспортируем все {} товаров компании {}", allIds.size(), companyOwnerId);
+            request = request.toBuilder().productIds(ids).build();
+            log.info("Экспорт из папок: {} товаров", ids.size());
+        }
+
+        // Финальная проверка
+        if (request.getProductIds() == null || request.getProductIds().isEmpty()) {
+            throw new ValidationException("Не выбрано товаров для экспорта");
         }
 
         String format = request.getFormat() != null ? request.getFormat().toUpperCase() : "EXCEL";
@@ -73,6 +82,8 @@ public class ExportServiceImpl implements ExportService {
 
     /**
      * Генерация Excel файла с этикетками
+     * Экспортирует все данные этикетки (элементы: штрихкоды, текст, изображения, DataMatrix)
+     * Если этикетка не создана — экспортирует данные из товара по умолчанию
      */
     private byte[] generateExcelExport(String userEmail, Long companyOwnerId, ExportRequest request) {
         try (Workbook workbook = new XSSFWorkbook();
@@ -80,21 +91,37 @@ public class ExportServiceImpl implements ExportService {
 
             Sheet sheet = workbook.createSheet("Этикетки");
 
-            List<LabelResponseDto> labels = labelService.getLabelsByProductIds(
-                    userEmail, companyOwnerId, request.getProductIds());
+            // Получаем все товары и их этикетки
+            List<Long> productIds = request.getProductIds();
+            List<OzonProduct> products = productRepository.findAllById(productIds);
+            
+            // Получаем сохранённые этикетки
+            List<Label> labels = labelRepository.findByCompanyIdAndProductIdIn(companyOwnerId, productIds);
+            Map<Long, Label> labelByProductId = new HashMap<>();
+            for (Label label : labels) {
+                labelByProductId.put(label.getProductId(), label);
+            }
 
+            log.info("Экспорт этикеток: {} товаров, {} сохранённых этикеток", products.size(), labels.size());
+
+            // Собираем динамические колонки из всех этикеток
             Set<String> dynamicColumns = new LinkedHashSet<>();
-            for (LabelResponseDto label : labels) {
-                LabelConfigDto config = label.getConfig();
-                for (LayerDto layer : config.getLayers()) {
-                    if ("dynamic".equals(layer.getLayerType()) && layer.getColumnName() != null) {
-                        dynamicColumns.add(layer.getColumnName());
-                    } else if ("dynamic".equals(layer.getLayerType()) && layer.getName() != null) {
-                        dynamicColumns.add(layer.getName());
+            for (Label label : labels) {
+                if (label.getConfig() != null) {
+                    LabelConfigDto config = parseConfig(label.getConfig());
+                    if (config != null && config.getLayers() != null) {
+                        for (LayerDto layer : config.getLayers()) {
+                            if ("dynamic".equals(layer.getLayerType()) && layer.getColumnName() != null) {
+                                dynamicColumns.add(layer.getColumnName());
+                            } else if ("dynamic".equals(layer.getLayerType()) && layer.getName() != null) {
+                                dynamicColumns.add(layer.getName());
+                            }
+                        }
                     }
                 }
             }
 
+            // Создаём заголовки
             Row headerRow = sheet.createRow(0);
             int colIndex = 0;
 
@@ -102,77 +129,100 @@ public class ExportServiceImpl implements ExportService {
             headerRow.createCell(colIndex++).setCellValue("Артикул");
             headerRow.createCell(colIndex++).setCellValue("Название");
             headerRow.createCell(colIndex++).setCellValue("Количество");
+            headerRow.createCell(colIndex++).setCellValue("Фото");
 
+            // Добавляем колонки для динамических слоёв
             for (String colName : dynamicColumns) {
                 headerRow.createCell(colIndex++).setCellValue(colName);
             }
 
-            CellStyle headerStyle = workbook.createCellStyle();
-            Font headerFont = workbook.createFont();
-            headerFont.setBold(true);
-            headerFont.setFontHeightInPoints((short) 11);
-            headerStyle.setFont(headerFont);
-            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
-            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-            headerStyle.setBorderBottom(BorderStyle.THIN);
-            headerStyle.setBorderTop(BorderStyle.THIN);
-            headerStyle.setBorderLeft(BorderStyle.THIN);
-            headerStyle.setBorderRight(BorderStyle.THIN);
+            // Добавляем колонки для элементов этикетки
+            headerRow.createCell(colIndex++).setCellValue("Элементы этикетки (JSON)");
 
-            for (int i = 0; i < headerRow.getLastCellNum(); i++) {
-                headerRow.getCell(i).setCellStyle(headerStyle);
-            }
+            applyHeaderStyle(workbook, headerRow);
 
+            // Записываем данные
             int rowNum = 1;
-            for (LabelResponseDto label : labels) {
-                // Защита от null конфигурации
-                if (label.getConfig() == null) {
-                    log.warn("Этикетка {} не имеет конфигурации, пропускаем", label.getId());
-                    continue;
-                }
-                LabelConfigDto config = label.getConfig();
-                if (config.getElements() == null) {
-                    log.warn("Этикетка {} не имеет элементов, пропускаем", label.getId());
-                    continue;
-                }
-
+            for (OzonProduct product : products) {
                 Row row = sheet.createRow(rowNum++);
+                colIndex = 0;
 
-                int cellIndex = 0;
+                // Получаем этикетку для товара (если есть)
+                Label label = labelByProductId.get(product.getProductId());
+                LabelConfigDto config = null;
+                boolean hasLabel = false;
 
+                if (label != null && label.getConfig() != null) {
+                    config = parseConfig(label.getConfig());
+                    hasLabel = config != null && config.getElements() != null && !config.getElements().isEmpty();
+                }
+
+                // Данные из товара (по умолчанию)
+                String barcode = getFirstBarcode(product);
+                String article = product.getOfferId() != null ? product.getOfferId() : "";
+                String name = product.getName() != null ? product.getName() : "";
+                Integer quantity = product.getPrintQuantity() != null ? product.getPrintQuantity() : 1;
+                String photoUrl = getFirstImage(product);
+
+                // Если есть этикетка — используем данные из неё
+                if (hasLabel) {
+                    String barcodeFromConfig = getBarcodeFromConfig(config);
+                    if (barcodeFromConfig != null && !barcodeFromConfig.isEmpty()) {
+                        barcode = barcodeFromConfig;
+                    }
+                }
+
+                // Записываем основные данные
+                row.createCell(colIndex++).setCellValue(barcode != null ? barcode : "");
+                row.createCell(colIndex++).setCellValue(article != null ? article : "");
+                row.createCell(colIndex++).setCellValue(name != null ? name : "");
+                row.createCell(colIndex++).setCellValue(quantity != null ? quantity : 0);
+                row.createCell(colIndex++).setCellValue(photoUrl != null ? photoUrl : "");
+
+                // Динамические колонки
                 Map<String, String> layerValues = new HashMap<>();
-                for (ElementDto element : config.getElements()) {
-                    LayerDto layer = config.getLayers().stream()
-                            .filter(l -> l.getId().equals(element.getLayerId()))
-                            .findFirst()
-                            .orElse(null);
+                if (hasLabel) {
+                    for (ElementDto element : config.getElements()) {
+                        LayerDto layer = config.getLayers().stream()
+                                .filter(l -> l.getId().equals(element.getLayerId()))
+                                .findFirst()
+                                .orElse(null);
 
-                    if (layer != null && "dynamic".equals(layer.getLayerType())) {
-                        String colName = layer.getColumnName() != null ? layer.getColumnName() : layer.getName();
-                        if (colName != null && element.getContent() != null) {
-                            layerValues.put(colName, element.getContent());
+                        if (layer != null && "dynamic".equals(layer.getLayerType())) {
+                            String colName = layer.getColumnName() != null ? layer.getColumnName() : layer.getName();
+                            if (colName != null && element.getContent() != null) {
+                                layerValues.put(colName, element.getContent());
+                            }
                         }
                     }
                 }
 
-                String barcode = getBarcodeFromConfig(config);
-                String article = getArticleFromConfig(config);
-                row.createCell(cellIndex++).setCellValue(barcode != null ? barcode : "");
-                row.createCell(cellIndex++).setCellValue(article != null ? article : "");
-                row.createCell(cellIndex++).setCellValue(label.getName() != null ? label.getName() : "");
-                row.createCell(cellIndex++).setCellValue(1);
-
                 for (String colName : dynamicColumns) {
-                    row.createCell(cellIndex++).setCellValue(layerValues.getOrDefault(colName, ""));
+                    row.createCell(colIndex++).setCellValue(layerValues.getOrDefault(colName, ""));
+                }
+
+                // Экспортируем все элементы этикетки в JSON формате
+                if (hasLabel) {
+                    try {
+                        String elementsJson = objectMapper.writeValueAsString(config.getElements());
+                        row.createCell(colIndex++).setCellValue(elementsJson);
+                    } catch (Exception e) {
+                        log.warn("Ошибка записи элементов этикетки для продукта {}: {}", product.getProductId(), e.getMessage());
+                        row.createCell(colIndex++).setCellValue("");
+                    }
+                } else {
+                    // Этикетка не создана — помечаем как данные по умолчанию
+                    row.createCell(colIndex++).setCellValue("{\"default\": true, \"productId\": " + product.getProductId() + "}");
                 }
             }
 
+            // Автонастройка ширины колонок
             for (int i = 0; i < headerRow.getLastCellNum(); i++) {
                 sheet.autoSizeColumn(i);
             }
 
             workbook.write(baos);
-            log.info("Сгенерирован Excel экспорт для {} этикеток", labels.size());
+            log.info("Сгенерирован Excel экспорт для {} товаров", products.size());
             return baos.toByteArray();
 
         } catch (Exception e) {
@@ -182,14 +232,21 @@ public class ExportServiceImpl implements ExportService {
     }
 
     private LabelConfigDto parseConfig(String configJson) {
+        if (configJson == null || configJson.isEmpty()) {
+            return null;
+        }
         try {
             return objectMapper.readValue(configJson, LabelConfigDto.class);
         } catch (Exception e) {
-            throw new ValidationException("Ошибка парсинга конфигурации этикетки");
+            log.warn("Ошибка парсинга конфигурации этикетки: {}", e.getMessage());
+            return null;
         }
     }
 
     private String getBarcodeFromConfig(LabelConfigDto config) {
+        if (config == null || config.getElements() == null) {
+            return "";
+        }
         for (ElementDto element : config.getElements()) {
             if ("barcode".equals(element.getType()) && element.getContent() != null) {
                 return element.getContent();
@@ -199,6 +256,9 @@ public class ExportServiceImpl implements ExportService {
     }
 
     private String getArticleFromConfig(LabelConfigDto config) {
+        if (config == null || config.getElements() == null) {
+            return "";
+        }
         for (ElementDto element : config.getElements()) {
             if ("text".equals(element.getType()) && element.getContent() != null) {
                 String content = element.getContent();
