@@ -27,9 +27,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.*;
 
 @Service
@@ -93,7 +96,8 @@ public class ProductCreationServiceIml implements ProductCreationService {
         }
 
         String filename = file.getOriginalFilename();
-        if (filename == null || (!filename.endsWith(".xlsx") && !filename.endsWith(".xls"))) {
+        String extension = getFileExtension(filename);
+        if (!"xlsx".equals(extension) && !"xls".equals(extension)) {
             throw new IllegalArgumentException("Поддерживаются только Excel файлы (.xlsx, .xls)");
         }
 
@@ -101,13 +105,8 @@ public class ProductCreationServiceIml implements ProductCreationService {
         userService.findByEmail(userEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
 
-        // 3. Открытие файла через Apache POI
-        Workbook workbook;
-        try {
-            workbook = WorkbookFactory.create(file.getInputStream());
-        } catch (IOException e) {
-            throw new IllegalArgumentException("Ошибка чтения Excel файла: " + e.getMessage(), e);
-        }
+        // 3. Open workbook from uploaded bytes
+        Workbook workbook = openWorkbook(file, false);
 
         try {
             Sheet sheet = workbook.getSheetAt(0);
@@ -274,7 +273,8 @@ public class ProductCreationServiceIml implements ProductCreationService {
         }
 
         String filename = file.getOriginalFilename();
-        if (filename == null || (!filename.endsWith(".xlsx") && !filename.endsWith(".xls"))) {
+        String extension = getFileExtension(filename);
+        if (!"xlsx".equals(extension) && !"xls".equals(extension)) {
             throw new IllegalArgumentException("Поддерживаются только Excel файлы (.xlsx, .xls)");
         }
 
@@ -290,13 +290,8 @@ public class ProductCreationServiceIml implements ProductCreationService {
             throw new IllegalArgumentException("Папка не была создана из Excel файла");
         }
 
-        // 3. Открытие файла
-        Workbook workbook;
-        try {
-            workbook = WorkbookFactory.create(file.getInputStream());
-        } catch (IOException e) {
-            throw new IllegalArgumentException("Ошибка чтения Excel файла: " + e.getMessage(), e);
-        }
+        // 3. Open workbook from uploaded bytes
+        Workbook workbook = openWorkbook(file, true);
 
         try {
             Sheet sheet = workbook.getSheetAt(0);
@@ -547,6 +542,117 @@ public class ProductCreationServiceIml implements ProductCreationService {
 
         labelService.createLabel(userEmail, companyOwnerId, createDto);
         log.info("Создана этикетка для товара {} (productId: {})", name, product.getProductId());
+    }
+
+    private Workbook openWorkbook(MultipartFile file, boolean updateFlow) {
+        String originalFilename = file.getOriginalFilename();
+        String extension = getFileExtension(originalFilename);
+        String stage = updateFlow ? "update" : "import";
+
+        try {
+            byte[] rawBytes = file.getBytes();
+            byte[] normalizedBytes = normalizeExcelBytes(rawBytes, extension, originalFilename, file.getContentType(), stage);
+            return WorkbookFactory.create(new ByteArrayInputStream(normalizedBytes));
+        } catch (Exception e) {
+            log.error("Failed to read Excel file ({}): name={}, contentType={}, size={} bytes, error={}",
+                    stage, originalFilename, file.getContentType(), file.getSize(), e.getMessage(), e);
+            throw new IllegalArgumentException(
+                    "Failed to read Excel file: " + originalFilename +
+                            ". The file may be corrupted or sent in an invalid format. " +
+                            "Ensure it is saved as .xlsx/.xls and uploaded as binary multipart data.", e);
+        }
+    }
+
+    private byte[] normalizeExcelBytes(byte[] rawBytes,
+                                       String extension,
+                                       String originalFilename,
+                                       String contentType,
+                                       String stage) {
+        byte[] bytes = rawBytes;
+
+        if ("xlsx".equals(extension) && !hasZipMagic(bytes)) {
+            String payload = new String(bytes, StandardCharsets.UTF_8).trim();
+            payload = stripDataUrlPrefix(payload).replaceAll("\\s+", "");
+
+            if (isLikelyBase64(payload)) {
+                try {
+                    byte[] decoded = Base64.getDecoder().decode(payload);
+                    if (hasZipMagic(decoded)) {
+                        log.warn("Excel upload '{}' ({}) arrived as base64 text, automatic decode was applied",
+                                originalFilename, stage);
+                        bytes = decoded;
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    // Keep original bytes; validation below will return a clear error.
+                }
+            }
+        }
+
+        log.info("Received {} bytes from file {} (stage={}, contentType={}, magic={})",
+                bytes.length, originalFilename, stage, contentType, formatMagic(bytes));
+
+        if ("xlsx".equals(extension) && !hasZipMagic(bytes)) {
+            throw new IllegalArgumentException(
+                    "XLSX file payload is not in binary multipart format (magic=" +
+                            formatMagic(bytes) + ")");
+        }
+
+        return bytes;
+    }
+
+    private String getFileExtension(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return "";
+        }
+
+        int dotIndex = filename.lastIndexOf('.');
+        if (dotIndex < 0 || dotIndex == filename.length() - 1) {
+            return "";
+        }
+
+        return filename.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private boolean hasZipMagic(byte[] bytes) {
+        return bytes != null
+                && bytes.length >= 4
+                && bytes[0] == 0x50
+                && bytes[1] == 0x4B
+                && ((bytes[2] == 0x03 && bytes[3] == 0x04)
+                || (bytes[2] == 0x05 && bytes[3] == 0x06)
+                || (bytes[2] == 0x07 && bytes[3] == 0x08));
+    }
+
+    private String stripDataUrlPrefix(String payload) {
+        if (payload == null || payload.isEmpty()) {
+            return payload;
+        }
+
+        if (payload.startsWith("data:")) {
+            int commaIndex = payload.indexOf(',');
+            if (commaIndex >= 0 && commaIndex < payload.length() - 1) {
+                return payload.substring(commaIndex + 1);
+            }
+        }
+        return payload;
+    }
+
+    private boolean isLikelyBase64(String payload) {
+        if (payload == null || payload.isEmpty() || payload.length() % 4 != 0) {
+            return false;
+        }
+        return payload.matches("^[A-Za-z0-9+/=]+$");
+    }
+
+    private String formatMagic(byte[] bytes) {
+        if (bytes == null || bytes.length < 4) {
+            return "short";
+        }
+        return String.format("%02X %02X %02X %02X",
+                bytes[0] & 0xFF,
+                bytes[1] & 0xFF,
+                bytes[2] & 0xFF,
+                bytes[3] & 0xFF);
     }
 
     /**

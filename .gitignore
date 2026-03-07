@@ -7,9 +7,14 @@ target/
 /.mvn
 /.idea
 
-*.md
+
 
 nul
+
+
+/node_modules
+ecosystem.local.config.js
+*.md
 
 ### STS ###
 .apt_generated

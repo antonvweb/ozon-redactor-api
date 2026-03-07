@@ -30,6 +30,18 @@ public interface DataMatrixCodeRepository extends JpaRepository<DataMatrixCode, 
      */
     @Query("SELECT d FROM DataMatrixCode d WHERE d.productId = :productId AND d.isUsed = false ORDER BY d.id ASC")
     Optional<DataMatrixCode> findFirstUnusedByProductId(@Param("productId") Long productId);
+
+    /**
+     * Найти следующий неиспользованный код из конкретного файла
+     */
+    @Query("SELECT d FROM DataMatrixCode d WHERE d.fileId = :fileId AND d.isUsed = false ORDER BY d.id ASC")
+    Optional<DataMatrixCode> findFirstUnusedByFileId(@Param("fileId") Long fileId);
+
+    /**
+     * Найти следующий неиспользованный код из конкретного файла для компании
+     */
+    @Query("SELECT d FROM DataMatrixCode d WHERE d.fileId = :fileId AND d.companyId = :companyId AND d.isUsed = false ORDER BY d.id ASC")
+    Optional<DataMatrixCode> findFirstUnusedByFileIdAndCompanyId(@Param("fileId") Long fileId, @Param("companyId") Long companyId);
     
     /**
      * Посчитать количество неиспользованных кодов для продукта
@@ -45,6 +57,21 @@ public interface DataMatrixCodeRepository extends JpaRepository<DataMatrixCode, 
      * Посчитать количество использованных кодов для продукта
      */
     long countByProductIdAndIsUsedTrue(Long productId);
+
+    /**
+     * Посчитать количество неиспользованных кодов для файла
+     */
+    long countByFileIdAndIsUsedFalse(Long fileId);
+
+    /**
+     * Посчитать общее количество кодов для файла
+     */
+    long countByFileId(Long fileId);
+
+    /**
+     * Посчитать количество использованных кодов для файла
+     */
+    long countByFileIdAndIsUsedTrue(Long fileId);
     
     /**
      * Проверить существование кода для компании

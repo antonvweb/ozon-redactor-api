@@ -52,6 +52,12 @@
             <artifactId>jackson-annotations</artifactId>
         </dependency>
 
+        <!-- Jackson Databind (for custom deserializers) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
         <!-- Servlet API (for multipart exceptions) -->
         <dependency>
             <groupId>org.apache.tomcat.embed</groupId>

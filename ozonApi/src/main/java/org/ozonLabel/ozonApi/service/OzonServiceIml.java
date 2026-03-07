@@ -370,6 +370,7 @@ public class OzonServiceIml implements OzonService {
                     .promotions(parseJson(product.getPromotions(), new TypeReference<List<Map<String, Object>>>() {}))
                     .sku(product.getSku())
                     .availabilities(parseJson(product.getAvailabilities(), new TypeReference<List<Map<String, Object>>>() {}))
+                    .printQuantity(product.getPrintQuantity())
                     .build();
         } catch (Exception e) {
             throw new RuntimeException("Ошибка маппинга OzonProduct в ProductInfo", e);
@@ -524,7 +525,7 @@ public class OzonServiceIml implements OzonService {
                 .stock(stock)
                 .color(color)
                 .tags(tags)
-                .printQuantity(1)  // По умолчанию 1, будет заполнено при загрузке из БД
+                .printQuantity(product.getPrintQuantity() != null ? product.getPrintQuantity() : 1)
                 .hasLabel(false)   // TODO: заполнять через labelRepository при загрузке списка
                 .dataMatrixStats(null) // TODO: заполнять через dataMatrixCodeRepository при загрузке
                 .build();

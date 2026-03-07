@@ -246,27 +246,81 @@ public class DataMatrixServiceImpl implements DataMatrixService {
             String userEmail,
             Long companyOwnerId,
             Long productId) {
-        
+
         // Находим следующий неиспользованный код
         Optional<DataMatrixCode> codeOpt = dataMatrixCodeRepository.findFirstUnusedByProductId(productId);
-        
+
         if (codeOpt.isEmpty()) {
             return Optional.empty();
         }
-        
+
         DataMatrixCode code = codeOpt.get();
-        
+
         // Проверяем принадлежность компании
         if (!code.getCompanyId().equals(companyOwnerId)) {
             throw new ValidationException("Код не принадлежит этой компании");
         }
-        
+
         // Помечаем как использованный
         code.setIsUsed(true);
         code.setUsedAt(java.time.LocalDateTime.now());
         dataMatrixCodeRepository.save(code);
-        
+
         return Optional.of(code.getCode());
+    }
+
+    @Override
+    @Transactional
+    public Optional<String> reserveNextCodeFromFile(
+            String userEmail,
+            Long companyOwnerId,
+            Long fileId) {
+
+        // Находим следующий неиспользованный код из файла
+        Optional<DataMatrixCode> codeOpt = dataMatrixCodeRepository.findFirstUnusedByFileIdAndCompanyId(fileId, companyOwnerId);
+
+        if (codeOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        DataMatrixCode code = codeOpt.get();
+
+        // Помечаем как использованный
+        code.setIsUsed(true);
+        code.setUsedAt(java.time.LocalDateTime.now());
+        dataMatrixCodeRepository.save(code);
+
+        log.info("Зарезервирован код DataMatrix из файла {} пользователем {}", fileId, userEmail);
+
+        return Optional.of(code.getCode());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DataMatrixStatsDto getStatsForFile(
+            String userEmail,
+            Long companyOwnerId,
+            Long fileId) {
+
+        companyService.checkAccess(userEmail, companyOwnerId);
+
+        // Проверяем существование файла и принадлежность компании
+        DataMatrixFile file = dataMatrixFileRepository.findById(fileId)
+                .orElseThrow(() -> new ValidationException("Файл не найден"));
+
+        if (!file.getCompanyId().equals(companyOwnerId)) {
+            throw new ValidationException("Доступ запрещён");
+        }
+
+        long total = dataMatrixCodeRepository.countByFileId(fileId);
+        long remaining = dataMatrixCodeRepository.countByFileIdAndIsUsedFalse(fileId);
+        long used = dataMatrixCodeRepository.countByFileIdAndIsUsedTrue(fileId);
+
+        return DataMatrixStatsDto.builder()
+                .total(total)
+                .remaining(remaining)
+                .used(used)
+                .build();
     }
 
     @Override

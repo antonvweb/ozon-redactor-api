@@ -121,6 +121,24 @@ public class DataMatrixController {
     }
 
     /**
+     * Получить статистику по файлу с кодами
+     */
+    @GetMapping("/files/{fileId}/stats")
+    public ResponseEntity<DataMatrixStatsDto> getFileStats(
+            @PathVariable Long fileId,
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        log.info("Получение статистики файла {} компании {} пользователем {}",
+                fileId, companyOwnerId, userEmail);
+
+        DataMatrixStatsDto stats = dataMatrixService.getStatsForFile(
+                userEmail, companyOwnerId, fileId);
+        return ResponseEntity.ok(stats);
+    }
+
+    /**
      * Скачать оригинальный CSV файл
      */
     @GetMapping("/files/{fileId}/download")

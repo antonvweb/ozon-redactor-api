@@ -16,4 +16,5 @@ public class LayerDto {
     private Boolean visible;
     private String layerType; // static или dynamic
     private String columnName; // для динамических слоёв
+    private String elementType; // text, barcode, datamatrix, date, image
 }

@@ -79,4 +79,5 @@ public class ProductInfo {
     private List<Map<String, Object>> promotions;
     private Long sku;
     private List<Map<String, Object>> availabilities;
+    private Integer printQuantity;
 }

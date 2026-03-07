@@ -417,10 +417,25 @@ public class PrintServiceImpl implements PrintService {
     private int[] renderDataMatrix(Canvas canvas, ElementDto element, float x, float y, float width, float height,
                                     String userEmail, Long companyOwnerId, Long productId) {
         try {
-            Optional<String> codeOpt = dataMatrixService.reserveNextCodeForProduct(userEmail, companyOwnerId, productId);
+            // Проверяем есть ли привязка к конкретному файлу
+            Long fileId = element.getDataMatrixFileId();
+            
+            Optional<String> codeOpt;
+            if (fileId != null) {
+                // Резервируем код из конкретного файла
+                codeOpt = dataMatrixService.reserveNextCodeFromFile(userEmail, companyOwnerId, fileId);
+                if (codeOpt.isEmpty()) {
+                    log.warn("Нет доступных DataMatrix кодов в файле {} для продукта {}", fileId, productId);
+                }
+            } else {
+                // Фоллбэк: резервируем из общего пула продукта
+                codeOpt = dataMatrixService.reserveNextCodeForProduct(userEmail, companyOwnerId, productId);
+                if (codeOpt.isEmpty()) {
+                    log.warn("Нет доступных DataMatrix кодов для продукта {}", productId);
+                }
+            }
 
             if (codeOpt.isEmpty()) {
-                log.warn("Нет доступных DataMatrix кодов для продукта {}", productId);
                 // Рисуем заглушку - пустой квадрат с текстом "Нет кода"
                 drawDataMatrixPlaceholder(canvas, x, y, width, height);
                 return new int[]{0, 1};

@@ -66,6 +66,32 @@ public interface DataMatrixService {
         Long companyOwnerId,
         Long productId
     );
+
+    /**
+     * Зарезервировать следующий неиспользованный код из конкретного файла
+     * @param userEmail email пользователя
+     * @param companyOwnerId ID компании
+     * @param fileId ID файла с кодами
+     * @return код или пустой Optional если кодов нет
+     */
+    Optional<String> reserveNextCodeFromFile(
+        String userEmail,
+        Long companyOwnerId,
+        Long fileId
+    );
+
+    /**
+     * Получить статистику по кодам для конкретного файла
+     * @param userEmail email пользователя
+     * @param companyOwnerId ID компании
+     * @param fileId ID файла
+     * @return статистика по файлу
+     */
+    DataMatrixStatsDto getStatsForFile(
+        String userEmail,
+        Long companyOwnerId,
+        Long fileId
+    );
     
     /**
      * Распарсить GS1 DataMatrix код

@@ -120,6 +120,7 @@ public class LabelValidator {
                     throw new ValidationException(
                             "Минимальная высота DataMatrix: " + MIN_SQUARE_BARCODE_SIZE + " мм");
                 }
+                // dataMatrixFileId проверяется на уровне сервиса при сохранении этикетки
             }
             case "date" -> {
                 if (element.getDateType() != null && !VALID_DATE_TYPES.contains(element.getDateType())) {

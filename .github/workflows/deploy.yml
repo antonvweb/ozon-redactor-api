@@ -152,6 +152,14 @@ jobs:
             --exclude='.env' \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ env.DEPLOY_PATH }}/
 
+      - name: Install dotenv on server
+        run: |
+          ssh -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            echo "=== Installing dotenv ==="
+            npm install dotenv --save
+          EOF
+
   # 3. Билд common (если изменился)
   build-common:
     runs-on: ubuntu-latest

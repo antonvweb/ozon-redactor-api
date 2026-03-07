@@ -49,4 +49,8 @@ public class ElementDto {
     private String fillColor;
     private String borderColor;
     private Integer borderWidth;
+
+    // Для DATAMATRIX
+    private Long dataMatrixFileId;  // ID выбранного файла с кодами DataMatrix
+    private String dataMatrixValue; // Значение (пусто, код берётся из файла при печати)
 }
