@@ -25,6 +25,12 @@ public interface OzonProductRepository extends JpaRepository<OzonProduct, Long> 
 
     Page<OzonProduct> findByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
 
+    /**
+     * Получить все productId для компании (для экспорта всех товаров)
+     */
+    @Query("SELECT p.productId FROM OzonProduct p WHERE p.userId = :companyId ORDER BY p.updatedAt DESC")
+    List<Long> findProductIdsByCompanyId(@Param("companyId") Long companyId);
+
     void deleteByUserId(Long userId);
 
     Long countByUserId(Long userId);

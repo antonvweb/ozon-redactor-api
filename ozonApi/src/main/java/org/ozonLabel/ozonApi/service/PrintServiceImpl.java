@@ -76,32 +76,49 @@ public class PrintServiceImpl implements PrintService {
             Long lastProductId = null;
 
             for (Long productId : productIds) {
-                LabelResponseDto label;
                 try {
-                    label = labelService.getLabelByProductId(userEmail, companyOwnerId, productId);
+                    LabelResponseDto label;
+                    try {
+                        label = labelService.getLabelByProductId(userEmail, companyOwnerId, productId);
+                    } catch (Exception e) {
+                        log.warn("Этикетка для продукта {} не найдена, пропускаем", productId);
+                        continue;
+                    }
+
+                    // Защита от null
+                    if (label == null) {
+                        log.warn("Этикетка для товара {} не найдена, пропускаем", productId);
+                        continue;
+                    }
+                    if (label.getConfig() == null) {
+                        log.warn("Этикетка для товара {} не имеет конфигурации, пропускаем", productId);
+                        continue;
+                    }
+
+                    int copiesCount = copies.getOrDefault(productId, 1);
+                    if (copiesCount <= 0) copiesCount = 1;
+
+                    for (int i = 0; i < copiesCount; i++) {
+                        if (!firstLabel && !separatorType.equals("NONE") && !productId.equals(lastProductId)) {
+                            addSeparator(pdf, separatorType);
+                        }
+
+                        totalLabels++;
+                        int[] codesUsedInfo = generateLabelPage(pdf, label, userEmail, companyOwnerId, productId);
+                        dataMatrixCodesUsed += codesUsedInfo[0];
+                        if (codesUsedInfo[1] > 0) {
+                            productsMissingDmCodes.add(productId);
+                        }
+
+                        firstLabel = false;
+                    }
+
+                    lastProductId = productId;
+
                 } catch (Exception e) {
-                    log.warn("Этикетка для продукта {} не найдена, пропускаем", productId);
-                    continue;
+                    log.error("Ошибка рендеринга этикетки для товара {}: {}", productId, e.getMessage(), e);
+                    // Продолжаем с остальными — не прерываем весь экспорт из-за одного товара
                 }
-
-                int copiesCount = copies.getOrDefault(productId, 1);
-
-                for (int i = 0; i < copiesCount; i++) {
-                    if (!firstLabel && !separatorType.equals("NONE") && !productId.equals(lastProductId)) {
-                        addSeparator(pdf, separatorType);
-                    }
-
-                    totalLabels++;
-                    int[] codesUsedInfo = generateLabelPage(pdf, label, userEmail, companyOwnerId, productId);
-                    dataMatrixCodesUsed += codesUsedInfo[0];
-                    if (codesUsedInfo[1] > 0) {
-                        productsMissingDmCodes.add(productId);
-                    }
-
-                    firstLabel = false;
-                }
-
-                lastProductId = productId;
             }
 
             pdf.close();
@@ -200,6 +217,16 @@ public class PrintServiceImpl implements PrintService {
     }
 
     private int[] renderElement(Canvas canvas, ElementDto element, LabelConfigDto config, String userEmail, Long companyOwnerId, Long productId) {
+        // Защита от null
+        if (element == null || element.getType() == null) {
+            return new int[]{0, 0};
+        }
+        if (element.getX() == null || element.getY() == null ||
+            element.getWidth() == null || element.getHeight() == null) {
+            log.warn("Элемент {} имеет null координаты, пропускаем", element.getId());
+            return new int[]{0, 0};
+        }
+
         String type = element.getType();
 
         float x = element.getX().floatValue() * (float) MM_TO_POINTS;

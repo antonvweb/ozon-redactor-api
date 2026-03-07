@@ -40,12 +40,22 @@ public class ExportServiceImpl implements ExportService {
     public byte[] exportLabels(String userEmail, Long companyOwnerId, ExportRequest request) {
         companyService.checkAccess(userEmail, companyOwnerId);
 
-        // Если productIds не задан, но заданы folderIds — собрать productIds
+        // Если folderIds указаны — собираем productIds из папок
         if ((request.getProductIds() == null || request.getProductIds().isEmpty())
                 && request.getFolderIds() != null && !request.getFolderIds().isEmpty()) {
             boolean withSubs = Boolean.TRUE.equals(request.getIncludeSubfolders());
             List<Long> ids = exportFolderHelper.collectProductIds(companyOwnerId, request.getFolderIds(), withSubs);
             request = request.toBuilder().productIds(ids).build();
+        }
+
+        // Если productIds всё ещё пустые — берём ВСЕ товары компании
+        if (request.getProductIds() == null || request.getProductIds().isEmpty()) {
+            List<Long> allIds = productRepository.findProductIdsByCompanyId(companyOwnerId);
+            if (allIds.isEmpty()) {
+                throw new ValidationException("У компании нет товаров для экспорта");
+            }
+            request = request.toBuilder().productIds(allIds).build();
+            log.info("productIds не указаны, экспортируем все {} товаров компании {}", allIds.size(), companyOwnerId);
         }
 
         String format = request.getFormat() != null ? request.getFormat().toUpperCase() : "EXCEL";
@@ -115,7 +125,17 @@ public class ExportServiceImpl implements ExportService {
 
             int rowNum = 1;
             for (LabelResponseDto label : labels) {
+                // Защита от null конфигурации
+                if (label.getConfig() == null) {
+                    log.warn("Этикетка {} не имеет конфигурации, пропускаем", label.getId());
+                    continue;
+                }
                 LabelConfigDto config = label.getConfig();
+                if (config.getElements() == null) {
+                    log.warn("Этикетка {} не имеет элементов, пропускаем", label.getId());
+                    continue;
+                }
+
                 Row row = sheet.createRow(rowNum++);
 
                 int cellIndex = 0;
@@ -135,8 +155,10 @@ public class ExportServiceImpl implements ExportService {
                     }
                 }
 
-                row.createCell(cellIndex++).setCellValue(getBarcodeFromConfig(config));
-                row.createCell(cellIndex++).setCellValue(getArticleFromConfig(config));
+                String barcode = getBarcodeFromConfig(config);
+                String article = getArticleFromConfig(config);
+                row.createCell(cellIndex++).setCellValue(barcode != null ? barcode : "");
+                row.createCell(cellIndex++).setCellValue(article != null ? article : "");
                 row.createCell(cellIndex++).setCellValue(label.getName() != null ? label.getName() : "");
                 row.createCell(cellIndex++).setCellValue(1);
 
