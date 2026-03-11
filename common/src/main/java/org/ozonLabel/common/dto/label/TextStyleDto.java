@@ -23,8 +23,6 @@ public class TextStyleDto {
     private Boolean underline;
     private String textAlign;
     private String color;
-    private String backgroundColor;
-    private Boolean inverted;
     private BigDecimal lineHeight;
     private BigDecimal letterSpacing;
 }

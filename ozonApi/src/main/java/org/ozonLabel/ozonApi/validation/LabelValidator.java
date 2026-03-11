@@ -52,13 +52,6 @@ public class LabelValidator {
         if (layers == null || layers.isEmpty()) {
             throw new ValidationException("Должен быть хотя бы один слой");
         }
-
-        boolean hasBackgroundLayer = layers.stream()
-                .anyMatch(l -> l.getId() != null && l.getId() == 0);
-
-        if (!hasBackgroundLayer) {
-            throw new ValidationException("Фоновый слой (id=0) обязателен");
-        }
     }
 
     private void validateElements(List<ElementDto> elements, List<LayerDto> layers) {

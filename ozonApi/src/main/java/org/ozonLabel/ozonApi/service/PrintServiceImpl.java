@@ -300,18 +300,6 @@ public class PrintServiceImpl implements PrintService {
                 paragraph.setFontColor(textColor);
             }
 
-            // Background color
-            if (style.getBackgroundColor() != null) {
-                Color bgColor = parseColor(style.getBackgroundColor());
-                paragraph.setBackgroundColor(bgColor);
-            }
-
-            // Inverted (белый текст на чёрном фоне)
-            if (style.getInverted() != null && style.getInverted()) {
-                paragraph.setFontColor(new DeviceRgb(255, 255, 255));
-                paragraph.setBackgroundColor(new DeviceRgb(0, 0, 0));
-            }
-
             // Line height
             if (style.getLineHeight() != null) {
                 paragraph.setMultipliedLeading(style.getLineHeight().floatValue());
