@@ -30,4 +30,8 @@ public class TextStyleDto {
     private BigDecimal strokeWidth;
     private String strokeWidthUnit;
     private String fillType;
+    
+    // Цвета для фигур (дублируются из ElementDto для совместимости)
+    private String fillColor;
+    private String borderColor;
 }

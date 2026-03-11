@@ -19,6 +19,16 @@ public class LabelMapper {
     public LabelResponseDto toDto(Label label) {
         LabelConfigDto config = parseConfig(label.getConfig());
 
+        // Логируем элементы при чтении
+        if (config != null && config.getElements() != null) {
+            log.info("Чтение этикетки с {} элементами", config.getElements().size());
+            for (int i = 0; i < config.getElements().size(); i++) {
+                var elem = config.getElements().get(i);
+                log.info("Элемент [{}]: type={}, fillColor={}, borderColor={}, borderWidth={}", 
+                    i, elem.getFillColor(), elem.getBorderColor(), elem.getBorderWidth());
+            }
+        }
+
         return LabelResponseDto.builder()
                 .id(label.getId())
                 .userId(label.getUserId())

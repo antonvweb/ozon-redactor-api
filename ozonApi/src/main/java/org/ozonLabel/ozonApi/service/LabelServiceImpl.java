@@ -55,6 +55,14 @@ public class LabelServiceImpl implements LabelService {
             throw new ConflictException("Этикетка для этого продукта уже существует");
         }
 
+        // Логируем элементы перед сохранением
+        log.info("Сохранение этикетки с {} элементами", dto.getConfig().getElements().size());
+        for (int i = 0; i < dto.getConfig().getElements().size(); i++) {
+            var elem = dto.getConfig().getElements().get(i);
+            log.info("Элемент [{}]: type={}, fillColor={}, borderColor={}, borderWidth={}", 
+                i, elem.getType(), elem.getFillColor(), elem.getBorderColor(), elem.getBorderWidth());
+        }
+
         Label label = Label.builder()
                 .userId(userId)
                 .companyId(companyOwnerId)
@@ -100,6 +108,14 @@ public class LabelServiceImpl implements LabelService {
                 .orElseThrow(() -> new ResourceNotFoundException("Этикетка с id=" + id));
 
         labelValidator.validate(dto.getConfig());
+
+        // Логируем элементы перед сохранением
+        log.info("Обновление этикетки id={} с {} элементами", id, dto.getConfig().getElements().size());
+        for (int i = 0; i < dto.getConfig().getElements().size(); i++) {
+            var elem = dto.getConfig().getElements().get(i);
+            log.info("Элемент [{}]: type={}, fillColor={}, borderColor={}, borderWidth={}", 
+                i, elem.getType(), elem.getFillColor(), elem.getBorderColor(), elem.getBorderWidth());
+        }
 
         label.setName(dto.getName());
         label.setWidth(dto.getConfig().getWidth());
@@ -174,9 +190,23 @@ public class LabelServiceImpl implements LabelService {
 
     private String toJson(LabelConfigDto config) {
         try {
-            return objectMapper.writeValueAsString(config);
+            String json = objectMapper.writeValueAsString(config);
+            log.info("Сериализация config в JSON (длина={}): {}", json.length(), json.substring(0, Math.min(500, json.length())));
+            return json;
         } catch (JsonProcessingException e) {
+            log.error("Ошибка сериализации конфигурации этикетки", e);
             throw new RuntimeException("Ошибка сериализации конфигурации этикетки", e);
+        }
+    }
+
+    private LabelConfigDto fromJson(String json) {
+        try {
+            LabelConfigDto config = objectMapper.readValue(json, LabelConfigDto.class);
+            log.debug("Десериализация config из JSON");
+            return config;
+        } catch (JsonProcessingException e) {
+            log.error("Ошибка десериализации конфигурации этикетки", e);
+            throw new RuntimeException("Ошибка десериализации конфигурации этикетки", e);
         }
     }
 
@@ -266,14 +296,6 @@ public class LabelServiceImpl implements LabelService {
                 .skippedCount(skippedCount)
                 .message(String.format("Обновлено этикеток: %d, пропущено: %d", updatedCount, skippedCount))
                 .build();
-    }
-
-    private LabelConfigDto fromJson(String json) {
-        try {
-            return objectMapper.readValue(json, LabelConfigDto.class);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Ошибка десериализации конфигурации этикетки", e);
-        }
     }
 
     @Override

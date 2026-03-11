@@ -92,6 +92,16 @@ public class LabelController {
 
         String userEmail = auth.getName();
         log.info("Обновление этикетки {} компании {} пользователем {}", id, companyOwnerId, userEmail);
+        
+        // Логирование элементов для отладки
+        if (dto.getConfig() != null && dto.getConfig().getElements() != null) {
+            log.info("Конфигурация содержит {} элементов", dto.getConfig().getElements().size());
+            for (int i = 0; i < dto.getConfig().getElements().size(); i++) {
+                var elem = dto.getConfig().getElements().get(i);
+                log.info("Элемент [{}]: type={}, fillColor={}, borderColor={}, borderWidth={}", 
+                    i, elem.getType(), elem.getFillColor(), elem.getBorderColor(), elem.getBorderWidth());
+            }
+        }
 
         LabelResponseDto response = labelService.updateLabel(userEmail, companyOwnerId, id, dto);
         return ResponseEntity.ok(response);

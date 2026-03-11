@@ -802,17 +802,30 @@ public class PrintServiceImpl implements PrintService {
         try {
             PdfCanvas pdfCanvas = new PdfCanvas(canvas.getPdfDocument().getLastPage());
 
-            // Получаем стили
+            // Получаем стили из корня элемента
             String fillColor = element.getFillColor();
             String borderColor = element.getBorderColor();
             Integer borderWidth = element.getBorderWidth();
-            
-            // Стили из TextStyleDto для новых фигур
+
+            // Стили из TextStyleDto для новых фигур (fallback)
             BigDecimal strokeWidth = null;
             String fillType = null;
+            String styleFillColor = null;
+            String styleBorderColor = null;
+            
             if (element.getStyle() != null) {
                 strokeWidth = element.getStyle().getStrokeWidth();
                 fillType = element.getStyle().getFillType();
+                styleFillColor = element.getStyle().getFillColor();
+                styleBorderColor = element.getStyle().getBorderColor();
+            }
+            
+            // Приоритет: корневые поля, затем из style
+            if ((fillColor == null || fillColor.isEmpty()) && styleFillColor != null && !styleFillColor.isEmpty()) {
+                fillColor = styleFillColor;
+            }
+            if ((borderColor == null || borderColor.isEmpty()) && styleBorderColor != null && !styleBorderColor.isEmpty()) {
+                borderColor = styleBorderColor;
             }
 
             // Применяем rotation если нужно
@@ -855,7 +868,8 @@ public class PrintServiceImpl implements PrintService {
             pdfCanvas.setLineWidth(lineWidth);
 
             // Определяем тип заполнения
-            boolean isFilled = "filled".equals(fillType);
+            // Если fillColor задан, считаем фигуру заполненной (если fillType не установлен явно в "outline")
+            boolean isFilled = fillColor != null && !fillColor.isEmpty() && !"outline".equals(fillType);
             boolean isOutline = "outline".equals(fillType);
             boolean hasBorder = borderColor != null && !borderColor.isEmpty() && lineWidth > 0;
 
