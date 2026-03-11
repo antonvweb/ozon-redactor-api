@@ -45,7 +45,7 @@ public class ElementDto {
     private Boolean useCurrentDate;
     private DateSettingsDto dateSettings;
 
-    // Для RECTANGLE
+    // Для FIGURES (line, circle, square, triangle, rhombus)
     private String fillColor;
     private String borderColor;
     private Integer borderWidth;

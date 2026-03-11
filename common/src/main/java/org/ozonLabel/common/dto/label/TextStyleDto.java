@@ -14,10 +14,10 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class TextStyleDto {
     private String fontFamily;
-    
+
     @JsonDeserialize(using = FontSizeDeserializer.class)
     private BigDecimal fontSize;
-    
+
     private String fontWeight;
     private Boolean italic;
     private Boolean underline;
@@ -25,4 +25,9 @@ public class TextStyleDto {
     private String color;
     private BigDecimal lineHeight;
     private BigDecimal letterSpacing;
+
+    // Стили для фигур
+    private BigDecimal strokeWidth;
+    private String strokeWidthUnit;
+    private String fillType;
 }

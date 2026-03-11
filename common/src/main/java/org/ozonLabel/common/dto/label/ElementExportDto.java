@@ -20,7 +20,7 @@ public class ElementExportDto {
     // Обязательные поля
     private String id;
     private String name;
-    private String type; // barcode, text, image, datamatrix, rectangle, date
+    private String type; // barcode, text, image, datamatrix, date, line, circle, square, triangle, rhombus
     private Integer layerId;
     private BigDecimal x;
     private BigDecimal y;
@@ -51,7 +51,7 @@ public class ElementExportDto {
     private Boolean useCurrentDate;
     private DateSettingsDto dateSettings;
 
-    // Для RECTANGLE
+    // Для FIGURES (line, circle, square, triangle, rhombus)
     private String fillColor;
     private String borderColor;
     private Integer borderWidth;

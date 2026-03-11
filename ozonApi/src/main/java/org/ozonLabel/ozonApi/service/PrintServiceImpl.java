@@ -262,7 +262,12 @@ public class PrintServiceImpl implements PrintService {
                 renderImage(canvas, element, x, y, width, height, rotation);
                 break;
             case "rectangle":
-                renderRectangle(canvas, element, x, y, width, height, rotation);
+            case "line":
+            case "circle":
+            case "square":
+            case "triangle":
+            case "rhombus":
+                renderShape(canvas, element, x, y, width, height, rotation);
                 break;
         }
 
@@ -791,29 +796,23 @@ public class PrintServiceImpl implements PrintService {
     }
 
     /**
-     * Рендеринг прямоугольника
+     * Рендеринг фигур (rectangle, line, circle, square, triangle, rhombus)
      */
-    private void renderRectangle(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
+    private void renderShape(Canvas canvas, ElementDto element, float x, float y, float width, float height, Integer rotation) {
         try {
             PdfCanvas pdfCanvas = new PdfCanvas(canvas.getPdfDocument().getLastPage());
 
-            // Цвет заливки
+            // Получаем стили
             String fillColor = element.getFillColor();
-            if (fillColor != null && !fillColor.isEmpty()) {
-                Color fill = parseColor(fillColor);
-                pdfCanvas.setFillColor(fill);
-            } else {
-                pdfCanvas.setFillColor(new DeviceRgb(255, 255, 255)); // белый по умолчанию
-            }
-
-            // Цвет и толщина границы
             String borderColor = element.getBorderColor();
             Integer borderWidth = element.getBorderWidth();
-
-            if (borderColor != null && !borderColor.isEmpty() && borderWidth != null && borderWidth > 0) {
-                Color border = parseColor(borderColor);
-                pdfCanvas.setStrokeColor(border);
-                pdfCanvas.setLineWidth(borderWidth.floatValue());
+            
+            // Стили из TextStyleDto для новых фигур
+            BigDecimal strokeWidth = null;
+            String fillType = null;
+            if (element.getStyle() != null) {
+                strokeWidth = element.getStyle().getStrokeWidth();
+                fillType = element.getStyle().getFillType();
             }
 
             // Применяем rotation если нужно
@@ -831,13 +830,57 @@ public class PrintServiceImpl implements PrintService {
                 );
             }
 
-            // Рисуем прямоугольник
-            pdfCanvas.rectangle(x, y, width, height);
-
-            if (borderColor != null && !borderColor.isEmpty() && borderWidth != null && borderWidth > 0) {
-                pdfCanvas.fillStroke(); // заливка + обводка
+            // Настройка цветов
+            if (fillColor != null && !fillColor.isEmpty()) {
+                Color fill = parseColor(fillColor);
+                pdfCanvas.setFillColor(fill);
             } else {
-                pdfCanvas.fill(); // только заливка
+                pdfCanvas.setFillColor(new DeviceRgb(255, 255, 255)); // белый по умолчанию
+            }
+
+            if (borderColor != null && !borderColor.isEmpty()) {
+                Color border = parseColor(borderColor);
+                pdfCanvas.setStrokeColor(border);
+            } else {
+                pdfCanvas.setStrokeColor(new DeviceRgb(0, 0, 0)); // чёрный по умолчанию
+            }
+
+            // Толщина контура: приоритет borderWidth, затем strokeWidth
+            float lineWidth = 1f;
+            if (borderWidth != null && borderWidth > 0) {
+                lineWidth = borderWidth.floatValue();
+            } else if (strokeWidth != null && strokeWidth.compareTo(BigDecimal.ZERO) > 0) {
+                lineWidth = strokeWidth.floatValue();
+            }
+            pdfCanvas.setLineWidth(lineWidth);
+
+            // Определяем тип заполнения
+            boolean isFilled = "filled".equals(fillType);
+            boolean isOutline = "outline".equals(fillType);
+            boolean hasBorder = borderColor != null && !borderColor.isEmpty() && lineWidth > 0;
+
+            // Рендеринг по типу фигуры
+            String type = element.getType();
+            switch (type) {
+                case "line":
+                    renderLine(pdfCanvas, x, y, width, height, isFilled, isOutline, hasBorder);
+                    break;
+                case "circle":
+                    renderCircle(pdfCanvas, x, y, width, height, isFilled, isOutline, hasBorder);
+                    break;
+                case "square":
+                    renderSquare(pdfCanvas, x, y, width, height, isFilled, isOutline, hasBorder);
+                    break;
+                case "triangle":
+                    renderTriangle(pdfCanvas, x, y, width, height, isFilled, isOutline, hasBorder);
+                    break;
+                case "rhombus":
+                    renderRhombus(pdfCanvas, x, y, width, height, isFilled, isOutline, hasBorder);
+                    break;
+                case "rectangle":
+                default:
+                    renderRectangleShape(pdfCanvas, x, y, width, height, isFilled, isOutline, hasBorder);
+                    break;
             }
 
             if (rotation != null && rotation != 0) {
@@ -845,7 +888,147 @@ public class PrintServiceImpl implements PrintService {
             }
 
         } catch (Exception e) {
-            log.error("Ошибка рендеринга прямоугольника: {}", e.getMessage(), e);
+            log.error("Ошибка рендеринга фигуры {}: {}", element.getType(), e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Рендеринг линии (горизонтальная)
+     */
+    private void renderLine(PdfCanvas pdfCanvas, float x, float y, float width, float height, 
+                           boolean isFilled, boolean isOutline, boolean hasBorder) {
+        // Линия рисуется как тонкий прямоугольник
+        float lineThickness = height > 0 ? height : 1f;
+        
+        pdfCanvas.rectangle(x, y, width, lineThickness);
+        
+        if (isFilled || (!isOutline && !hasBorder)) {
+            pdfCanvas.fillStroke();
+        } else if (hasBorder) {
+            pdfCanvas.stroke();
+        } else {
+            pdfCanvas.fill();
+        }
+    }
+
+    /**
+     * Рендеринг круга
+     */
+    private void renderCircle(PdfCanvas pdfCanvas, float x, float y, float width, float height, 
+                             boolean isFilled, boolean isOutline, boolean hasBorder) {
+        float radiusX = width / 2;
+        float radiusY = height / 2;
+        float centerX = x + radiusX;
+        float centerY = y + radiusY;
+
+        // Рисуем эллипс (круг если width == height)
+        pdfCanvas.ellipse(centerX, centerY, radiusX, radiusY);
+
+        if (isFilled || (!isOutline && !hasBorder)) {
+            if (hasBorder) {
+                pdfCanvas.fillStroke();
+            } else {
+                pdfCanvas.fill();
+            }
+        } else if (hasBorder) {
+            pdfCanvas.stroke();
+        }
+    }
+
+    /**
+     * Рендеринг квадрата
+     */
+    private void renderSquare(PdfCanvas pdfCanvas, float x, float y, float width, float height, 
+                             boolean isFilled, boolean isOutline, boolean hasBorder) {
+        pdfCanvas.rectangle(x, y, width, height);
+
+        if (isFilled || (!isOutline && !hasBorder)) {
+            if (hasBorder) {
+                pdfCanvas.fillStroke();
+            } else {
+                pdfCanvas.fill();
+            }
+        } else if (hasBorder) {
+            pdfCanvas.stroke();
+        }
+    }
+
+    /**
+     * Рендеринг треугольника (равносторонний, вписан в прямоугольник)
+     */
+    private void renderTriangle(PdfCanvas pdfCanvas, float x, float y, float width, float height, 
+                               boolean isFilled, boolean isOutline, boolean hasBorder) {
+        // Вершины треугольника
+        float topX = x + width / 2;
+        float topY = y;
+        float bottomLeftX = x;
+        float bottomLeftY = y + height;
+        float bottomRightX = x + width;
+        float bottomRightY = y + height;
+
+        pdfCanvas.moveTo(topX, topY);
+        pdfCanvas.lineTo(bottomLeftX, bottomLeftY);
+        pdfCanvas.lineTo(bottomRightX, bottomRightY);
+        pdfCanvas.closePath();
+
+        if (isFilled || (!isOutline && !hasBorder)) {
+            if (hasBorder) {
+                pdfCanvas.fillStroke();
+            } else {
+                pdfCanvas.fill();
+            }
+        } else if (hasBorder) {
+            pdfCanvas.stroke();
+        }
+    }
+
+    /**
+     * Рендеринг ромба (вписан в прямоугольник)
+     */
+    private void renderRhombus(PdfCanvas pdfCanvas, float x, float y, float width, float height, 
+                              boolean isFilled, boolean isOutline, boolean hasBorder) {
+        // Вершины ромба
+        float topX = x + width / 2;
+        float topY = y;
+        float rightX = x + width;
+        float rightY = y + height / 2;
+        float bottomX = x + width / 2;
+        float bottomY = y + height;
+        float leftX = x;
+        float leftY = y + height / 2;
+
+        pdfCanvas.moveTo(topX, topY);
+        pdfCanvas.lineTo(rightX, rightY);
+        pdfCanvas.lineTo(bottomX, bottomY);
+        pdfCanvas.lineTo(leftX, leftY);
+        pdfCanvas.closePath();
+
+        if (isFilled || (!isOutline && !hasBorder)) {
+            if (hasBorder) {
+                pdfCanvas.fillStroke();
+            } else {
+                pdfCanvas.fill();
+            }
+        } else if (hasBorder) {
+            pdfCanvas.stroke();
+        }
+    }
+
+    /**
+     * Рендеринг прямоугольника (базовый)
+     */
+    private void renderRectangleShape(PdfCanvas pdfCanvas, float x, float y, float width, float height, 
+                                     boolean isFilled, boolean isOutline, boolean hasBorder) {
+        pdfCanvas.rectangle(x, y, width, height);
+
+        if (isFilled || (!isOutline && !hasBorder)) {
+            if (hasBorder) {
+                pdfCanvas.fillStroke();
+            } else {
+                pdfCanvas.fill();
+            }
+        } else if (hasBorder) {
+            pdfCanvas.stroke();
         }
     }
 

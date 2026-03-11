@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 public class LabelValidator {
 
     private static final Set<String> VALID_ELEMENT_TYPES = Set.of(
-            "text", "image", "barcode", "date", "rectangle", "datamatrix"
+            "text", "image", "barcode", "date", "datamatrix", "line", "circle", "square", "triangle", "rhombus"
     );
 
     private static final Set<String> VALID_BARCODE_TYPES = Set.of(
@@ -123,6 +123,31 @@ public class LabelValidator {
             case "image" -> {
                 if (element.getImageUrl() == null && element.getImageId() == null) {
                     throw new ValidationException("Для изображения требуется imageUrl или imageId");
+                }
+            }
+            case "line", "circle", "square", "triangle", "rhombus" -> {
+                // Валидация для фигур
+                if (element.getWidth() != null && element.getWidth().compareTo(BigDecimal.ZERO) <= 0) {
+                    throw new ValidationException("Ширина фигуры должна быть больше 0");
+                }
+                if (element.getHeight() != null && element.getHeight().compareTo(BigDecimal.ZERO) <= 0) {
+                    throw new ValidationException("Высота фигуры должна быть больше 0");
+                }
+                
+                // Валидация толщины контура если указана
+                if (element.getStyle() != null && element.getStyle().getStrokeWidth() != null) {
+                    BigDecimal strokeWidth = element.getStyle().getStrokeWidth();
+                    if (strokeWidth.compareTo(BigDecimal.ZERO) < 0 || strokeWidth.compareTo(new BigDecimal("10")) > 0) {
+                        throw new ValidationException("Толщина контура должна быть от 0 до 10 мм");
+                    }
+                }
+                
+                // Валидация fillType
+                if (element.getStyle() != null && element.getStyle().getFillType() != null) {
+                    String fillType = element.getStyle().getFillType();
+                    if (!"filled".equals(fillType) && !"outline".equals(fillType)) {
+                        throw new ValidationException("fillType должен быть 'filled' или 'outline'");
+                    }
                 }
             }
         }
