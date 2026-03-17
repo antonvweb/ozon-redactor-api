@@ -5,14 +5,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserImageListResponseDto {
-    private List<UserImageDto> images;
-    private Integer totalCount;
-    private ImageStorageInfoDto storageInfo;
+public class ImageStorageInfoDto {
+    private long usedBytes;
+    private long maxBytes;
+    private long availableBytes;
+    private long imageCount;
+    private long maxFileSize;
 }

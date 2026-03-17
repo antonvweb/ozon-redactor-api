@@ -3,6 +3,7 @@ package org.ozonLabel.ozonApi.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ozonLabel.common.dto.ApiResponse;
+import org.ozonLabel.common.dto.label.ImageStorageInfoDto;
 import org.ozonLabel.common.dto.label.ImageUploadResponseDto;
 import org.ozonLabel.common.dto.label.UserImageListResponseDto;
 import org.ozonLabel.ozonApi.service.ImageService;
@@ -44,6 +45,16 @@ public class ImageController {
         log.info("Получение списка изображений для компании {} пользователем {}", companyOwnerId, userEmail);
 
         UserImageListResponseDto response = imageService.getUserImages(userEmail, companyOwnerId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/storage-info")
+    public ResponseEntity<ImageStorageInfoDto> getStorageInfo(
+            @RequestParam Long companyOwnerId,
+            Authentication auth) {
+
+        String userEmail = auth.getName();
+        ImageStorageInfoDto response = imageService.getStorageInfo(userEmail, companyOwnerId);
         return ResponseEntity.ok(response);
     }
 

@@ -47,6 +47,7 @@ public class SecurityConfig {
                                 .preload(true))
                 )
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/user/**").authenticated()
                         .requestMatchers("/api/company/**").authenticated()
                         .requestMatchers("/api/notifications/**").authenticated()

@@ -34,6 +34,7 @@ public class NotificationServiceIml implements NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final NotificationWebSocketService webSocketService;
     private static final int MAX_UNREAD_FETCH = 100;
     private static final int CLEANUP_BATCH_SIZE = 1000;
 
@@ -60,9 +61,16 @@ public class NotificationServiceIml implements NotificationService {
         notification = notificationRepository.save(notification);
         log.info("Created notification {} for user {}", notification.getId(), dto.getUserId());
 
-        // Здесь используем mapToDto
-        // Для senderMap можно создать map с одним пользователем или null, если sender не нужен
-        return mapToDto(notification, Map.of());
+        NotificationResponseDto responseDto = mapToDto(notification, Map.of());
+
+        // Send real-time notification via WebSocket
+        userRepository.findById(dto.getUserId()).ifPresent(user -> {
+            webSocketService.sendNotification(user.getEmail(), responseDto);
+            Long unreadCount = notificationRepository.countByUserIdAndIsReadFalse(dto.getUserId());
+            webSocketService.sendUnreadCount(user.getEmail(), unreadCount);
+        });
+
+        return responseDto;
     }
 
     @Transactional
@@ -242,20 +250,28 @@ public class NotificationServiceIml implements NotificationService {
             notification.markAsRead();
             notificationRepository.save(notification);
             log.debug("Notification {} marked as read by user {}", notificationId, userEmail);
+            sendUnreadCountUpdate(user);
         }
     }
 
     @Transactional
     public int markMultipleAsRead(String userEmail, List<Long> notificationIds) {
         User user = getUserByEmail(userEmail);
-        return notificationRepository.markAsRead(notificationIds, user.getId(), LocalDateTime.now());
+        int count = notificationRepository.markAsRead(notificationIds, user.getId(), LocalDateTime.now());
+        if (count > 0) {
+            sendUnreadCountUpdate(user);
+        }
+        return count;
     }
 
     @Transactional
     public int markAllAsRead(String userEmail) {
         User user = getUserByEmail(userEmail);
-        // Use bulk update directly instead of fetching first
-        return notificationRepository.markAllAsReadForUser(user.getId(), LocalDateTime.now());
+        int count = notificationRepository.markAllAsReadForUser(user.getId(), LocalDateTime.now());
+        if (count > 0) {
+            sendUnreadCountUpdate(user);
+        }
+        return count;
     }
 
     @Transactional
@@ -271,12 +287,17 @@ public class NotificationServiceIml implements NotificationService {
 
         notificationRepository.delete(notification);
         log.debug("Notification {} deleted by user {}", notificationId, userEmail);
+        sendUnreadCountUpdate(user);
     }
 
     @Transactional
     public int deleteMultiple(String userEmail, List<Long> notificationIds) {
         User user = getUserByEmail(userEmail);
-        return notificationRepository.deleteByIds(notificationIds, user.getId());
+        int count = notificationRepository.deleteByIds(notificationIds, user.getId());
+        if (count > 0) {
+            sendUnreadCountUpdate(user);
+        }
+        return count;
     }
 
     public Long getUnreadCount(String userEmail) {
@@ -437,6 +458,11 @@ public class NotificationServiceIml implements NotificationService {
                 .readAt(notification.getReadAt())
                 .createdAt(notification.getCreatedAt())
                 .build();
+    }
+
+    private void sendUnreadCountUpdate(User user) {
+        Long unreadCount = notificationRepository.countByUserIdAndIsReadFalse(user.getId());
+        webSocketService.sendUnreadCount(user.getEmail(), unreadCount);
     }
 
     private User getUserByEmail(String email) {

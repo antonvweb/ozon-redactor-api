@@ -2,6 +2,7 @@ package org.ozonLabel.ozonApi.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.ozonLabel.common.dto.label.ImageStorageInfoDto;
 import org.ozonLabel.common.dto.label.ImageUploadResponseDto;
 import org.ozonLabel.common.dto.label.UserImageDto;
 import org.ozonLabel.common.dto.label.UserImageListResponseDto;
@@ -34,6 +35,7 @@ public class ImageService {
             "image/png", "image/jpeg", "image/webp"
     );
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+    private static final long MAX_TOTAL_SIZE_PER_USER = 30 * 1024 * 1024; // 30 MB
 
     // Magic bytes for file type verification
     private static final byte[] PNG_MAGIC = new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47};
@@ -53,6 +55,7 @@ public class ImageService {
         Long userId = getUserIdByEmail(userEmail);
 
         validateFile(file);
+        validateUserQuota(companyOwnerId, userId, file.getSize());
 
         String storedName = UUID.randomUUID() + getExtension(file.getOriginalFilename());
         String storagePath = fileStorageService.store(file, storedName, companyOwnerId);
@@ -90,9 +93,20 @@ public class ImageService {
                 .map(this::toDto)
                 .toList();
 
+        long usedBytes = userImageRepository.sumSizeBytesByCompanyIdAndUserId(companyOwnerId, userId);
+
+        ImageStorageInfoDto storageInfo = ImageStorageInfoDto.builder()
+                .usedBytes(usedBytes)
+                .maxBytes(MAX_TOTAL_SIZE_PER_USER)
+                .availableBytes(MAX_TOTAL_SIZE_PER_USER - usedBytes)
+                .imageCount(dtos.size())
+                .maxFileSize(MAX_FILE_SIZE)
+                .build();
+
         return UserImageListResponseDto.builder()
                 .images(dtos)
                 .totalCount(dtos.size())
+                .storageInfo(storageInfo)
                 .build();
     }
 
@@ -113,6 +127,34 @@ public class ImageService {
         UserResponseDto user = userService.findByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException("Пользователь с email " + email + " не найден"));
         return user.getId();
+    }
+
+    @Transactional(readOnly = true)
+    public ImageStorageInfoDto getStorageInfo(String userEmail, Long companyOwnerId) {
+        companyService.checkAccess(userEmail, companyOwnerId);
+        Long userId = getUserIdByEmail(userEmail);
+
+        long usedBytes = userImageRepository.sumSizeBytesByCompanyIdAndUserId(companyOwnerId, userId);
+        long imageCount = userImageRepository.countByCompanyIdAndUserId(companyOwnerId, userId);
+
+        return ImageStorageInfoDto.builder()
+                .usedBytes(usedBytes)
+                .maxBytes(MAX_TOTAL_SIZE_PER_USER)
+                .availableBytes(MAX_TOTAL_SIZE_PER_USER - usedBytes)
+                .imageCount(imageCount)
+                .maxFileSize(MAX_FILE_SIZE)
+                .build();
+    }
+
+    private void validateUserQuota(Long companyId, Long userId, long newFileSize) {
+        long usedBytes = userImageRepository.sumSizeBytesByCompanyIdAndUserId(companyId, userId);
+        if (usedBytes + newFileSize > MAX_TOTAL_SIZE_PER_USER) {
+            long availableMb = (MAX_TOTAL_SIZE_PER_USER - usedBytes) / (1024 * 1024);
+            throw new ValidationException(
+                    "Превышен лимит хранилища (30 МБ). Доступно: " + availableMb + " МБ. " +
+                    "Удалите ненужные изображения для освобождения места."
+            );
+        }
     }
 
     private void validateFile(MultipartFile file) {

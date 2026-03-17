@@ -14,8 +14,6 @@ nul
 
 /node_modules
 ecosystem.local.config.js
-*.md
-ecosystem.backend.config.local.js
 ecosystem.config.js
 package-lock.json
 package.json
